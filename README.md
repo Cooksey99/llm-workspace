@@ -33,7 +33,7 @@ make run
 The `make setup` command will automatically:
 1. Check for and install Ollama (via Homebrew if not present)
 2. Install Go dependencies
-3. Pull the required LLM model
+3. Pull the required LLM and embedding models from config.yaml
 4. Start Ollama service if not running
 
 ## Manual Installation
@@ -58,11 +58,15 @@ Or download directly from [ollama.ai](https://ollama.ai)
 make install-deps
 ```
 
-### 3. Pull LLM Model
+### 3. Pull Models
 
 ```bash
-# Default model (qwen2.5-coder:14b)
-make pull-model
+# Pull both LLM and embedding models from config.yaml
+make pull-all-models
+
+# Or pull individually
+make pull-model          # Pulls the LLM model
+make pull-embedding-model # Pulls the embedding model
 
 # Or manually pull a different model
 ollama pull qwen2.5-coder:32b
@@ -140,14 +144,18 @@ ollama pull <model-name>
 ## Make Commands
 
 ```bash
-make setup        # Complete first-time setup
-make install-deps # Install Go dependencies only
-make pull-model   # Pull the LLM model only
-make run          # Run the application
-make build        # Build binary (creates ./llm-app)
-make clean        # Remove built files and data
-make test         # Run tests
-make help         # Show all commands
+make setup               # Complete first-time setup
+make install-deps        # Install Go dependencies only
+make pull-model          # Pull the LLM model from config.yaml
+make pull-embedding-model # Pull the embedding model from config.yaml
+make pull-all-models     # Pull both LLM and embedding models
+make run                 # Run the application
+make build               # Build binary (creates ./llm-app)
+make clean               # Remove built files only (SAFE - keeps your data)
+make clean-data          # Remove vector DB and chat history (DESTRUCTIVE)
+make clean-all           # Remove everything including data (DESTRUCTIVE)
+make test                # Run tests
+make help                # Show all commands
 ```
 
 ## Troubleshooting
@@ -171,7 +179,10 @@ ps aux | grep ollama
 
 ### Model not available
 ```bash
-# Pull the required model
+# Pull models from your config.yaml
+make pull-all-models
+
+# Or pull a specific model manually
 ollama pull qwen2.5-coder:14b
 ```
 

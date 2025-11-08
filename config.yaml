@@ -1,13 +1,15 @@
 llm:
-  model: "qwen2.5-coder:32b"
+  model: "qwen3-coder:30b"
   base_url: "http://localhost:11434"
   temperature: 0.7
-  context_length: 8192
+  context_length: 256000
+  stream: true
 
 system_prompt: |
-  You are an AI assistant specialized in helping with programming tasks.
-  You have access to a knowledge base of the user's code and documentation.
-  Always provide concise, accurate responses with code examples when relevant.
+  You are an expert AI assistant specializing in both programming and general brainstorming.
+  You have full access to the user’s code, documentation, and conversation history.
+  Always provide concise, accurate, and well-explained responses, tailoring code examples and ideas to the user's style and preferences.
+  Use best practices for code and explain your reasoning if the user asks.
 
 rag:
   embedding_model: "nomic-embed-text"

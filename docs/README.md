@@ -4,7 +4,7 @@ A lightweight, portable local LLM environment with RAG (Retrieval Augmented Gene
 
 ## Features
 
-- Local LLM powered by Ollama (Qwen 2.5 Coder 32B)
+- Local LLM powered by Ollama
 - RAG with vector database (chromem-go)
 - Persistent conversation history
 - Learns from your interactions
@@ -22,7 +22,7 @@ chmod +x setup.sh
 
 This will:
 1. Install Ollama (if needed)
-2. Pull the Qwen 2.5 Coder 14B model
+2. Pull the preferred model
 3. Install Go dependencies
 4. Initialize the project
 
@@ -110,7 +110,7 @@ llm-workspace/
 
 ```yaml
 llm:
-  model: "llama3.1:8b"  # or "qwen2.5-coder:32b", etc.
+  model: "llama3.1:8b"  # or "qwen3-coder:30b", etc.
 ```
 
 Then: `ollama pull llama3.1:8b`
