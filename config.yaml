@@ -1,0 +1,25 @@
+llm:
+  model: "qwen2.5-coder:14b"
+  base_url: "http://localhost:11434"
+  temperature: 0.7
+  context_length: 8192
+
+system_prompt: |
+  You are an AI assistant specialized in helping with programming tasks.
+  You have access to a knowledge base of the user's code and documentation.
+  Always provide concise, accurate responses with code examples when relevant.
+
+rag:
+  embedding_model: "nomic-embed-text"
+  chunk_size: 512
+  chunk_overlap: 50
+  top_k: 5
+
+storage:
+  vector_db_path: "./data/vectordb"
+  chat_history_path: "./data/history"
+  
+personalization:
+  learn_from_interactions: true
+  save_conversations: true
+  user_preferences_path: "./data/preferences.json"
