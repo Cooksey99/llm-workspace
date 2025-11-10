@@ -33,7 +33,7 @@ func main() {
 
 	fileManager := fileops.NewManager(cfg, client, ragManager)
 
-	fmt.Println("🤖 Local LLM with RAG Ready!")
+	fmt.Println("Local LLM with RAG Ready!")
 	fmt.Printf("Model: %s\n", cfg.LLM.Model)
 	fmt.Printf("Knowledge Base: %d documents\n", ragManager.Count())
 	fmt.Println("\nCommands:")
@@ -72,19 +72,19 @@ func main() {
 			content := strings.TrimPrefix(input, "/add ")
 			err := ragManager.AddKnowledge(ctx, content, "user_input")
 			if err != nil {
-				fmt.Printf("❌ Error adding knowledge: %v\n", err)
+				fmt.Printf("Error adding knowledge: %v\n", err)
 			} else {
-				fmt.Println("✅ Added to knowledge base")
+				fmt.Println("Added to knowledge base")
 			}
 			continue
 		}
 
 		if strings.HasPrefix(input, "/index ") {
 			dirPath := strings.TrimPrefix(input, "/index ")
-			fmt.Printf("📚 Indexing directory: %s\n", dirPath)
+			fmt.Printf("Indexing directory: %s\n", dirPath)
 			err := ragManager.IndexDirectory(ctx, dirPath)
 			if err != nil {
-				fmt.Printf("❌ Error indexing: %v\n", err)
+				fmt.Printf("Error indexing: %v\n", err)
 			}
 			continue
 		}
@@ -94,7 +94,7 @@ func main() {
 			fmt.Println("🔧 File editing mode enabled")
 			response, err := fileManager.ChatWithTools(ctx, request)
 			if err != nil {
-				fmt.Printf("❌ Error: %v\n", err)
+				fmt.Printf("Error: %v\n", err)
 			} else if response != "" {
 				fmt.Printf("\n%s\n", response)
 			}

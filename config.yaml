@@ -4,6 +4,9 @@ llm:
   temperature: 0.7
   context_length: 256000
   stream: true
+  top_k: 20
+  top_p: 0.8
+  repitition_penalty: 1.05
 
 system_prompt: |
   You are an expert AI assistant specializing in both programming and general brainstorming.

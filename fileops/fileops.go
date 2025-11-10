@@ -48,7 +48,7 @@ func (m *Manager) WriteFile(path, content, reason string) error {
 		oldContent, _ := os.ReadFile(path)
 		err = os.WriteFile(backupPath, oldContent, info.Mode())
 		if err == nil {
-			fmt.Printf("💾 Backup created: %s\n", backupPath)
+			fmt.Printf("Backup created: %s\n", backupPath)
 		}
 	}
 
