@@ -12,15 +12,16 @@ A privacy-first AI terminal assistant that runs entirely on local or self-hosted
 - **PTY Terminal Wrapper** - AI-enhanced terminal session
 - **Interactive AI Chat** - Ask questions and get help without leaving your terminal
 - **RAG (Retrieval Augmented Generation)** - Context-aware responses from your codebase
-- **File Operations** - AI-assisted file editing and command execution
+- **Zero Data Leakage** - Complete privacy with local-only LLM execution
 
 ## Planned Features
 
+- **File Operations** - AI-assisted file editing and command execution
 - **Terminal Auto-Prediction** - Intelligent command suggestions as you type
 - **Personalized AI** - Learns your coding style and preferences
 - **Context-Aware Assistance** - Understands your project structure and history
 - **Optional Server Integration** - Self-hosted remote capabilities (local-first priority)
-- **Zero Data Leakage** - Complete privacy with local-only LLM execution
+
 
 ## Build
 
