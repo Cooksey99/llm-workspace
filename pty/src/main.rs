@@ -4,15 +4,17 @@ mod utils;
 use anyhow::Result;
 use std::os::fd::AsRawFd;
 
-use core::run_io_loop;
+use core::{run_io_loop, ServerManager};
 use portable_pty::{native_pty_system, CommandBuilder};
 use utils::{get_terminal_size, set_nonblocking, set_raw_mode, RestoreTermios};
 
 fn main() -> Result<()> {
-    // Access user shell
+    ServerManager::ensure_server()?;
+
     let shell = std::env::var("SHELL").unwrap();
 
     println!("Starting PTY wrapper with shell: {}", shell);
+    println!("AI commands available: /ai, /edit, /add, /index, /stats");
 
     let pty_system = native_pty_system();
 
