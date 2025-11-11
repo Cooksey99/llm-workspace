@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
@@ -14,8 +14,8 @@ struct Request {
 }
 
 #[derive(Deserialize)]
-struct Response {
-    success: bool,
+struct StreamChunk {
+    r#type: String,
     content: String,
     error: Option<String>,
 }
@@ -27,8 +27,9 @@ impl AiClient {
         let mut stream = UnixStream::connect(SOCKET_PATH)
             .context("Failed to connect to AI server. Is it running?")?;
 
-        stream.set_read_timeout(Some(Duration::from_secs(60))).ok();
-        stream.set_write_timeout(Some(Duration::from_secs(5))).ok();
+        stream.set_nonblocking(false)?;
+        stream.set_read_timeout(Some(Duration::from_secs(300))).ok();
+        stream.set_write_timeout(Some(Duration::from_secs(10))).ok();
 
         let request = Request {
             r#type: request_type.to_string(),
@@ -41,21 +42,46 @@ impl AiClient {
         stream.write_all(b"\n")?;
         stream.flush()?;
 
-        let mut response_data = String::new();
-        stream.read_to_string(&mut response_data)?;
-
-        let response: Response = serde_json::from_str(&response_data)?;
-
-        if response.success {
-            Ok(response.content)
-        } else {
-            Err(anyhow::anyhow!(
-                "AI request failed: {}",
-                response
-                    .error
-                    .unwrap_or_else(|| "Unknown error".to_string())
-            ))
+        // Read and process streaming chunks
+        use std::io::BufRead;
+        let buf_reader = std::io::BufReader::new(stream);
+        let mut result = String::new();
+        
+        for line in buf_reader.lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            
+            let chunk: StreamChunk = serde_json::from_str(&line)
+                .context(format!("Failed to parse chunk: {}", line))?;
+            
+            match chunk.r#type.as_str() {
+                "chunk" => {
+                    // Print chunk immediately for real-time display
+                    print!("{}", chunk.content);
+                    use std::io::Write;
+                    std::io::stdout().flush()?;
+                    result.push_str(&chunk.content);
+                }
+                "done" => {
+                    // Final response
+                    if !chunk.content.is_empty() {
+                        result = chunk.content;
+                    }
+                    break;
+                }
+                "error" => {
+                    return Err(anyhow::anyhow!(
+                        "AI request failed: {}",
+                        chunk.error.unwrap_or_else(|| "Unknown error".to_string())
+                    ));
+                }
+                _ => {}
+            }
         }
+        
+        Ok(result)
     }
 
     pub fn chat(query: &str, pwd: Option<&str>) -> Result<String> {

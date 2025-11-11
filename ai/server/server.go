@@ -31,6 +31,12 @@ type Response struct {
 	Error   string `json:"error,omitempty"`
 }
 
+type StreamChunk struct {
+	Type    string `json:"type"` // "chunk" or "done" or "error"
+	Content string `json:"content"`
+	Error   string `json:"error,omitempty"`
+}
+
 type Server struct {
 	cfg         *config.Config
 	client      *api.Client
@@ -108,11 +114,46 @@ func (s *Server) handleRequest(req Request) Response {
 	}
 }
 
+func (s *Server) handleConnectionStreaming(conn net.Conn, req Request) {
+	encoder := json.NewEncoder(conn)
+	
+	switch req.Type {
+	case "chat", "edit":
+		// For chat/edit, stream the response in real-time
+		response, err := s.fileManager.ChatWithToolsStream(s.ctx, req.Content, func(chunk string) {
+			// Send each chunk as it arrives
+			streamChunk := StreamChunk{Type: "chunk", Content: chunk}
+			if err := encoder.Encode(streamChunk); err != nil {
+				log.Printf("Failed to encode chunk: %v", err)
+			}
+		})
+		
+		if err != nil {
+			chunk := StreamChunk{Type: "error", Error: err.Error()}
+			encoder.Encode(chunk)
+			return
+		}
+		
+		// Send done signal with final response
+		done := StreamChunk{Type: "done", Content: response}
+		encoder.Encode(done)
+		
+	default:
+		// For other requests, use normal response
+		resp := s.handleRequest(req)
+		chunk := StreamChunk{Type: "done", Content: resp.Content}
+		if !resp.Success {
+			chunk.Type = "error"
+			chunk.Error = resp.Error
+		}
+		encoder.Encode(chunk)
+	}
+}
+
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	decoder := json.NewDecoder(conn)
-	encoder := json.NewEncoder(conn)
 
 	var req Request
 	if err := decoder.Decode(&req); err != nil {
@@ -120,11 +161,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	resp := s.handleRequest(req)
-
-	if err := encoder.Encode(resp); err != nil {
-		log.Printf("Failed to encode response: %v", err)
-	}
+	// Use streaming handler
+	s.handleConnectionStreaming(conn, req)
 }
 
 func (s *Server) Start() error {

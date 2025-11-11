@@ -78,8 +78,8 @@ pub fn run_io_loop(master: &mut Box<dyn portable_pty::MasterPty + Send>) -> Resu
     let mut reader = master.try_clone_reader()?;
     let mut writer = master.take_writer()?;
 
-    let mut stdin_buf = [0u8; 4096];
-    let mut pty_buf = [0u8; 4096];
+    let mut stdin_buf = [0u8; 65536];
+    let mut pty_buf = [0u8; 65536];
     let mut session = Session::new();
 
     session.show_mode_indicator(&mut writer)?;

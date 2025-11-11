@@ -70,9 +70,17 @@ func removeToolCalls(text string) string {
 	return strings.TrimSpace(toolCallRegex.ReplaceAllString(text, ""))
 }
 
+// Callback function type for streaming responses
+type StreamCallback func(chunk string)
+
 // Sends a message with file read/write tools enabled.
 // The LLM can request to read or modify files as needed.
 func (m *Manager) ChatWithTools(ctx context.Context, userMessage string) (string, error) {
+	return m.ChatWithToolsStream(ctx, userMessage, nil)
+}
+
+// ChatWithToolsStream allows streaming responses via callback
+func (m *Manager) ChatWithToolsStream(ctx context.Context, userMessage string, streamCallback StreamCallback) (string, error) {
 	relevantContext, err := m.ragManager.RetrieveContext(ctx, userMessage)
 	if err != nil {
 		log.Printf("Warning: retrieval failed: %v", err)
@@ -154,7 +162,10 @@ You: <tool_call>
 		var responseBuilder strings.Builder
 		err = m.client.Chat(ctx, req, func(resp api.ChatResponse) error {
 			if resp.Message.Content != "" {
-				fmt.Print(resp.Message.Content)
+				// Stream to callback if provided
+				if streamCallback != nil {
+					streamCallback(resp.Message.Content)
+				}
 				responseBuilder.WriteString(resp.Message.Content)
 			}
 			return nil
