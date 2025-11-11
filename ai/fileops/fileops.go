@@ -33,6 +33,9 @@ func NewManager(cfg *config.Config, client *api.Client, ragMgr *rag.Manager) *Ma
 
 // Reads and returns file contents.
 func (m *Manager) ReadFile(path string) (string, error) {
+	if m.config.Permission.Read == false {
+		return "", fmt.Errorf("no permission to read files")
+	}
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %w", err)
@@ -42,6 +45,9 @@ func (m *Manager) ReadFile(path string) (string, error) {
 
 // Writes content to a file, creating a backup if it exists.
 func (m *Manager) WriteFile(path, content, reason string) error {
+	if m.config.Permission.Write == false {
+		return fmt.Errorf("no permission to write to files")
+	}
 	info, err := os.Stat(path)
 	if err == nil {
 		backupPath := path + ".backup"
