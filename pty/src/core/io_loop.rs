@@ -22,11 +22,15 @@ pub fn run_io_loop(master: &mut Box<dyn portable_pty::MasterPty + Send>) -> Resu
                 let input = String::from_utf8_lossy(&stdin_buf[..n]);
                 
                 for ch in input.chars() {
+                    line_buffer.push(ch);
+                    
                     if ch == '\n' || ch == '\r' {
-                        let cmd = Command::parse(&line_buffer);
+                        let cmd = Command::parse(&line_buffer.trim_end());
                         
                         match cmd {
                             Command::PassThrough => {
+                                writer.write_all(line_buffer.as_bytes())?;
+                                writer.flush()?;
                                 line_buffer.clear();
                             }
                             _ => {
@@ -47,16 +51,13 @@ pub fn run_io_loop(master: &mut Box<dyn portable_pty::MasterPty + Send>) -> Resu
                                 stdout.flush()?;
                                 
                                 line_buffer.clear();
-                                continue;
                             }
                         }
                     } else {
-                        line_buffer.push(ch);
+                        writer.write_all(&[ch as u8])?;
+                        writer.flush()?;
                     }
                 }
-                
-                writer.write_all(&stdin_buf[..n])?;
-                writer.flush()?;
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {},
             Err(e) => return Err(e.into()),
