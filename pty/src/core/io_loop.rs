@@ -70,6 +70,8 @@ pub fn run_io_loop(master: &mut Box<dyn portable_pty::MasterPty + Send>) -> Resu
     let mut pty_buf = [0u8; 4096];
     let mut session = Session::new();
 
+    session.show_mode_indicator(&mut writer)?;
+
     loop {
         match stdin.read(&mut stdin_buf) {
             Ok(0) => break,
@@ -105,7 +107,6 @@ pub fn run_io_loop(master: &mut Box<dyn portable_pty::MasterPty + Send>) -> Resu
                             Command::PassThrough => {
                                 writer.write_all(session.line_buffer.as_bytes())?;
                                 writer.flush()?;
-                                session.line_buffer.clear();
                             }
                             _ => {
                                 stdout.write_all(b"\r\n")?;
@@ -123,13 +124,21 @@ pub fn run_io_loop(master: &mut Box<dyn portable_pty::MasterPty + Send>) -> Resu
                                     }
                                 }
                                 stdout.flush()?;
-
-                                session.line_buffer.clear();
                             }
                         }
+                        session.line_buffer.clear();
                     } else {
-                        writer.write_all(&[ch as u8])?;
-                        writer.flush()?;
+                        match session.mode {
+                            Mode::Terminal => {
+                                writer.write_all(&[ch as u8])?;
+                                writer.flush()?;
+                            }
+                            Mode::AI => {
+                                // In AI mode, echo the character to stdout for visual feedback
+                                stdout.write_all(&[ch as u8])?;
+                                stdout.flush()?;
+                            }
+                        }
                     }
                 }
             }
