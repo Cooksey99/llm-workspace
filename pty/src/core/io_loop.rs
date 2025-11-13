@@ -20,8 +20,8 @@ pub fn run_io_loop(master: &mut Box<dyn portable_pty::MasterPty + Send>) -> Resu
     let mut input_handler = InputHandler::new();
     let mut output_handler = OutputHandler::new(Box::new(std::io::stdout()));
 
-    let mut stdin_buf = Vec::<u8>::new();
-    let mut pty_buf = Vec::<u8>::new();
+    let mut stdin_buf = vec![0u8; 8192];
+    let mut pty_buf = vec![0u8; 262144];
 
     input_handler.show_mode_indicator(&mut writer)?;
 
