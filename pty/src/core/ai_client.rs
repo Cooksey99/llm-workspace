@@ -70,27 +70,27 @@ impl AiClient {
         let mut in_think = false;
         let mut i = 0;
         let bytes = text.as_bytes();
-        
+
         while i < bytes.len() {
-            if i + 7 <= bytes.len() && &bytes[i..i+7] == b"<think>" {
+            if i + 7 <= bytes.len() && &bytes[i..i + 7] == b"<think>" {
                 in_think = true;
                 i += 7;
                 continue;
             }
-            
-            if i + 8 <= bytes.len() && &bytes[i..i+8] == b"</think>" {
+
+            if i + 8 <= bytes.len() && &bytes[i..i + 8] == b"</think>" {
                 in_think = false;
                 i += 8;
                 continue;
             }
-            
+
             if !in_think {
                 result.push(bytes[i] as char);
             }
-            
+
             i += 1;
         }
-        
+
         result.trim().to_string()
     }
 
@@ -117,7 +117,6 @@ impl AiClient {
         };
 
         let json = serde_json::to_string(&request)?;
-        eprintln!("[DEBUG] Sending request with {} history messages", history_msgs.as_ref().map(|h| h.len()).unwrap_or(0));
         stream.write_all(json.as_bytes())?;
         stream.write_all(b"\n")?;
         stream.flush()?;
@@ -125,16 +124,16 @@ impl AiClient {
         use std::io::BufRead;
         let buf_reader = std::io::BufReader::new(stream);
         let mut result = String::new();
-        
+
         for line in buf_reader.lines() {
             let line = line?;
             if line.trim().is_empty() {
                 continue;
             }
-            
-            let chunk: StreamChunk = serde_json::from_str(&line)
-                .context(format!("Failed to parse chunk: {}", line))?;
-            
+
+            let chunk: StreamChunk =
+                serde_json::from_str(&line).context(format!("Failed to parse chunk: {}", line))?;
+
             match chunk.r#type.as_str() {
                 "chunk" => {
                     result.push_str(&chunk.content);
@@ -154,15 +153,23 @@ impl AiClient {
                 _ => {}
             }
         }
-        
+
         Ok(Self::strip_think_tags(&result))
     }
 
-    pub fn chat(query: &str, pwd: Option<&str>, history: Option<&ConversationHistory>) -> Result<String> {
+    pub fn chat(
+        query: &str,
+        pwd: Option<&str>,
+        history: Option<&ConversationHistory>,
+    ) -> Result<String> {
         Self::send_request("chat", query, pwd, history)
     }
 
-    pub fn edit(request: &str, pwd: Option<&str>, history: Option<&ConversationHistory>) -> Result<String> {
+    pub fn edit(
+        request: &str,
+        pwd: Option<&str>,
+        history: Option<&ConversationHistory>,
+    ) -> Result<String> {
         Self::send_request("edit", request, pwd, history)
     }
 

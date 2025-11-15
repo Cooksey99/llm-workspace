@@ -130,11 +130,7 @@ You: <tool_call>
 		},
 	}
 
-	log.Printf("[DEBUG] Received %d history messages", len(history))
 	if len(history) > 0 {
-		for i, msg := range history {
-			log.Printf("[DEBUG] History[%d]: %s: %s", i, msg.Role, msg.Content[:min(50, len(msg.Content))])
-		}
 		messages = append(messages, history...)
 	}
 
@@ -170,7 +166,6 @@ You: <tool_call>
 		fullResponse := responseBuilder.String()
 
 		toolCalls := parseToolCalls(fullResponse)
-		log.Printf("[DEBUG] Parsed %d tool calls from response", len(toolCalls))
 
 		messages = append(messages, api.Message{
 			Role:    "assistant",
@@ -179,14 +174,9 @@ You: <tool_call>
 
 		if len(toolCalls) == 0 {
 			cleanResponse := removeToolCalls(fullResponse)
-			log.Printf("[DEBUG] Returning response, length: %d", len(cleanResponse))
 			return cleanResponse, nil
 		}
-
-		log.Printf("[DEBUG] Executing %d tool calls", len(toolCalls))
 		for _, toolCall := range toolCalls {
-			log.Printf("[DEBUG] Calling tool: %s with args: %s", toolCall.Name, toolCall.Arguments)
-
 			result, err := m.toolRegistry.Execute(ctx, toolCall.Name, []byte(toolCall.Arguments))
 			if err != nil {
 				result = fmt.Sprintf("Error: %v", err)
@@ -200,7 +190,6 @@ You: <tool_call>
 				Content: fmt.Sprintf("Tool '%s' result:\n%s", toolCall.Name, result),
 			})
 		}
-		log.Printf("[DEBUG] Continuing loop to process tool results...")
 	}
 }
 
