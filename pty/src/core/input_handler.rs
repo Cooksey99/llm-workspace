@@ -206,8 +206,7 @@ impl InputHandler {
     ) -> Result<()> {
         match self.state.mode {
             Mode::Terminal => {
-                writer.write_all(&[ch as u8])?;
-                writer.flush()?;
+                // PTY handles echo in raw mode, no need to write character here
             }
             Mode::AI => {
                 if ch == '\x7f' || ch == '\x08' {
