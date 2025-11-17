@@ -8,6 +8,7 @@ pub enum Command {
     AiAdd(String),
     AiIndex(String),
     ClearHistory,
+    Exit,
     PassThrough,
 }
 
@@ -24,6 +25,7 @@ impl Command {
             ["/index", rest] => Command::AiIndex(rest.to_string()),
             ["/stats"] => Command::AiStats,
             ["/clear"] => Command::ClearHistory,
+            ["/exit"] | ["/quit"] => Command::Exit,
             _ => Command::PassThrough,
         }
     }
@@ -65,6 +67,9 @@ impl Command {
                     hist.clear();
                 }
                 Ok(Some("Conversation history cleared".to_string()))
+            }
+            Command::Exit => {
+                std::process::exit(0);
             }
             Command::PassThrough => Ok(None),
         }

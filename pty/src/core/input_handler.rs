@@ -186,7 +186,7 @@ impl InputHandler {
     /// Handles the display and buffering of a single character.
     /// 
     /// Behavior differs based on mode:
-    /// - Terminal mode: forwards character directly to PTY writer
+    /// - Terminal mode: forwards character directly to PTY writer (shell echoes back)
     /// - AI mode: echoes to stdout and handles backspace (\x7f, \x08)
     /// 
     /// # Arguments
@@ -196,12 +196,13 @@ impl InputHandler {
     pub fn handle_character(
         &mut self,
         ch: char,
-        _writer: &mut dyn Write,
+        writer: &mut dyn Write,
         stdout: &mut dyn Write,
     ) -> Result<()> {
         match self.state.mode {
             Mode::Terminal => {
-                // PTY handles echo in raw mode, no need to write character here
+                writer.write_all(&[ch as u8])?;
+                writer.flush()?;
             }
             Mode::AI => {
                 if ch == '\x7f' || ch == '\x08' {
