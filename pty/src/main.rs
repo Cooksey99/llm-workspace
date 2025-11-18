@@ -22,13 +22,17 @@ fn main() -> Result<()> {
     let terminal_size = get_terminal_size();
     let pair = pty_system.openpty(terminal_size)?;
 
-    // Spawn shell as interactive shell with explicit .zshrc sourcing
     let mut cmd = CommandBuilder::new(&shell);
-    cmd.arg("-i");  // Interactive shell
-    cmd.arg("-c");  // Execute command
-    cmd.arg("source ~/.zshrc 2>/dev/null; exec zsh -i");  // Source config then start interactive shell
-    // Ensure proper environment for shell initialization
-    cmd.env("TERM", "xterm-256color");
+    cmd.arg("-i");
+    
+    // Set flag to indicate we're in the PTY wrapper
+    cmd.env("PTY_WRAPPER", "1");
+    
+    // Inherit all environment variables from parent process
+    for (key, value) in std::env::vars() {
+        cmd.env(key, value);
+    }
+
     let _child = pair.slave.spawn_command(cmd).unwrap();
 
     // Slave isn't needed, so it can be dropped
