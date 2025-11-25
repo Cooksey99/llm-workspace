@@ -1,5 +1,6 @@
 mod config;
 mod ollama;
+mod rag;
 mod server;
 
 #[tokio::main]
@@ -12,6 +13,7 @@ async fn main() {
         }
     };
 
+    println!("Model: {}", cfg.llm.model);
     let server = server::Server::new(cfg);
     
     if let Err(e) = server.start().await {

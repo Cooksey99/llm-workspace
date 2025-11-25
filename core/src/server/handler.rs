@@ -1,5 +1,5 @@
 use super::types::{Request, RequestType, StreamChunk};
-use crate::{config::Config, ollama};
+use crate::{config::Config, ollama, rag};
 use tokio::sync::mpsc;
 
 pub type ChunkSender = mpsc::UnboundedSender<StreamChunk>;
@@ -8,13 +8,17 @@ pub type ChunkSender = mpsc::UnboundedSender<StreamChunk>;
 pub struct RequestHandler {
     config: Config,
     ollama_client: ollama::Client,
+    rag_manager: rag::Manager,
 }
 
 impl RequestHandler {
     pub fn new(config: Config, ollama_client: ollama::Client) -> Self {
+        let rag_manager = rag::Manager::new(&config, ollama_client.clone());
+        
         Self {
             config,
             ollama_client,
+            rag_manager,
         }
     }
     
@@ -56,23 +60,36 @@ impl RequestHandler {
     }
     
     async fn handle_add(&self, request: Request, sender: ChunkSender) {
-        let _ = sender.send(StreamChunk::done(format!(
-            "Added to knowledge base: {} (RAG not implemented yet)",
-            request.content
-        )));
+        match self.rag_manager.add_knowledge(&request.content, "user_input").await {
+            Ok(_) => {
+                let _ = sender.send(StreamChunk::done("Added to knowledge base"));
+            }
+            Err(e) => {
+                let _ = sender.send(StreamChunk::error(format!("Failed to add: {}", e)));
+            }
+        }
     }
     
     async fn handle_index(&self, request: Request, sender: ChunkSender) {
-        let _ = sender.send(StreamChunk::done(format!(
-            "Indexed directory: {} (RAG not implemented yet)",
-            request.content
-        )));
+        match self.rag_manager.index_directory(&request.content).await {
+            Ok(count) => {
+                let _ = sender.send(StreamChunk::done(format!(
+                    "Indexed {} files from: {}",
+                    count, request.content
+                )));
+            }
+            Err(e) => {
+                let _ = sender.send(StreamChunk::error(format!("Failed to index: {}", e)));
+            }
+        }
     }
     
     async fn handle_stats(&self, sender: ChunkSender) {
-        let _ = sender.send(StreamChunk::done(
-            "Knowledge base: 0 documents (RAG not implemented yet)"
-        ));
+        let count = self.rag_manager.count();
+        let _ = sender.send(StreamChunk::done(format!(
+            "Knowledge base contains {} documents",
+            count
+        )));
     }
     
     fn build_messages(&self, request: Request) -> Vec<ollama::Message> {

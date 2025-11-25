@@ -104,6 +104,25 @@ impl Client {
         
         Ok(())
     }
+    
+    /// Generates embeddings for the given text.
+    pub async fn embed(&self, request: EmbedRequest) -> Result<EmbedResponse> {
+        let url = format!("{}/api/embed", self.base_url);
+        
+        let response = self.http_client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await?;
+        
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(OllamaError::Api(error_text));
+        }
+        
+        let embed_response = response.json::<EmbedResponse>().await?;
+        Ok(embed_response)
+    }
 }
 
 /// A single message in a chat conversation.
@@ -205,6 +224,21 @@ pub struct ChatResponse {
     pub done_reason: Option<String>,
 }
 
+/// Request for generating embeddings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbedRequest {
+    pub model: String,
+    pub input: String,
+}
+
+/// Response containing embeddings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbedResponse {
+    pub model: String,
+    
+    #[serde(default)]
+    pub embeddings: Vec<Vec<f32>>,
+}
 
 #[cfg(test)]
 mod tests {
