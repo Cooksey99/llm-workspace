@@ -8,9 +8,7 @@
 
 mod files;
 
-pub use files::ReadFilePlugin;
-
-// TODO: Implement WriteFilePlugin
+pub use files::{ReadFilePlugin, WriteFilePlugin};
 // TODO: Implement ListDirectoryPlugin
 // TODO: Implement search functionality
 // TODO: Implement command execution
