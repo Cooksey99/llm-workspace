@@ -84,44 +84,7 @@ pub struct IndexerConfig {
 }
 
 fn default_exclude_patterns() -> Vec<String> {
-    vec![
-        // Version control
-        ".git".to_string(),
-        ".svn".to_string(),
-        ".hg".to_string(),
-        
-        // Build outputs
-        "target".to_string(),
-        "dist".to_string(),
-        "build".to_string(),
-        "out".to_string(),
-        ".next".to_string(),
-        
-        // Package managers
-        "node_modules".to_string(),
-        "vendor".to_string(),
-        ".pnpm-store".to_string(),
-        
-        // Python
-        "__pycache__".to_string(),
-        ".venv".to_string(),
-        "venv".to_string(),
-        ".pytest_cache".to_string(),
-        "*.egg-info".to_string(),
-        
-        // IDEs
-        ".vscode".to_string(),
-        ".idea".to_string(),
-        
-        // OS
-        ".DS_Store".to_string(),
-        "Thumbs.db".to_string(),
-        
-        // Temp/cache
-        "tmp".to_string(),
-        "temp".to_string(),
-        "cache".to_string(),
-    ]
+    crate::patterns::default_exclude_patterns()
 }
 
 impl Default for IndexerConfig {
