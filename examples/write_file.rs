@@ -11,7 +11,7 @@ use std::sync::Arc;
 async fn main() -> anyhow::Result<()> {
     println!("Nucleus - WriteFile Plugin Example\n");
     
-    let config = Config::load_default()?;
+    let config = Config::load_or_default();
     
     // Create registry with WRITE permission (required for WriteFilePlugin)
     let mut registry = PluginRegistry::new(Permission::READ_WRITE);

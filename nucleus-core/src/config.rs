@@ -168,7 +168,41 @@ impl Default for PersonalizationConfig {
     }
 }
 
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            vector_db_path: "./data/vectordb".to_string(),
+            chat_history_path: "./data/history".to_string(),
+        }
+    }
+}
+
+impl Default for LlmConfig {
+    fn default() -> Self {
+        Self {
+            model: "llama3.2:latest".to_string(),
+            base_url: "http://localhost:11434".to_string(),
+            temperature: 0.7,
+            context_length: 8192,
+        }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            llm: LlmConfig::default(),
+            system_prompt: "You are a helpful AI assistant specializing in programming and development tasks.".to_string(),
+            rag: RagConfig::default(),
+            storage: StorageConfig::default(),
+            personalization: PersonalizationConfig::default(),
+            permission: Permission::default(),
+        }
+    }
+}
+
 impl Config {
+    /// Load configuration from a YAML file.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let contents = fs::read_to_string(path)?;
         let mut config: Config = serde_yaml::from_str(&contents)?;
@@ -180,8 +214,9 @@ impl Config {
         Ok(config)
     }
 
-    pub fn load_default() -> Result<Self> {
-        Self::load("config.yaml")
+    /// Load configuration from `config.yaml` if it exists, otherwise use defaults.
+    pub fn load_or_default() -> Self {
+        Self::load("config.yaml").unwrap_or_default()
     }
 }
 

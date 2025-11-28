@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
     
     println!("Current dir: {:?}\n", std::env::current_dir()?);
 
-    let config = Config::load_default()?;
+    let config = Config::load_or_default();
     
     let mut registry = PluginRegistry::new(Permission::READ_ONLY);
     registry.register(Arc::new(ReadFilePlugin::new()));
