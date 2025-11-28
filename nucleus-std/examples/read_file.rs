@@ -1,6 +1,6 @@
-use nucleus_plugin::{Plugin, PluginRegistry, Permission};
+use nucleus_plugin::{PluginRegistry, Permission};
 use nucleus_std::ReadFilePlugin;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 #[tokio::main]
 async fn main() {
@@ -11,22 +11,37 @@ async fn main() {
     
     // Register the ReadFilePlugin
     let read_plugin = Arc::new(ReadFilePlugin::new());
-    if registry.register(read_plugin) {
+    if registry.register(read_plugin.clone()) {
         println!("ReadFilePlugin registered\n");
     } else {
         eprintln!("Failed to register plugin (permission denied)");
         return;
     }
+    let path = "Cargo.toml";
 
     // Test 1: Read the Cargo.toml file
     println!("Test 1: Reading Cargo.toml");
     let input = serde_json::json!({
-        "path": "Cargo.toml"
+        "path": path
     });
     
+    // Call using LLM execute method
     match registry.execute("read_file", input).await {
         Ok(output) => {
-            println!("Success!");
+            println!("Success on .execute()");
+            println!("Content preview (first 200 chars):");
+            println!("{}", &output.content.chars().take(200).collect::<String>());
+            println!("...\n");
+        }
+        Err(e) => {
+            eprintln!("Error: {}\n", e);
+        }
+    }
+
+    // Call using plugin method directly
+    match read_plugin.read(Path::new(&path)).await {
+        Ok(output) => {
+            println!("Success on .read()");
             println!("Content preview (first 200 chars):");
             println!("{}", &output.content.chars().take(200).collect::<String>());
             println!("...\n");

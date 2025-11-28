@@ -2,7 +2,7 @@ use nucleus_plugin::{Plugin, PluginError, PluginOutput, Permission, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Plugin for reading file contents.
 pub struct ReadFilePlugin;
@@ -22,6 +22,13 @@ struct WriteFileParams {
 impl ReadFilePlugin {
     pub fn new() -> Self {
         Self
+    }
+
+    pub async fn read(&self, path: &Path) -> Result<PluginOutput> {
+        let input = serde_json::json!({
+            "path": path
+        });
+        self.execute(input).await
     }
 }
 

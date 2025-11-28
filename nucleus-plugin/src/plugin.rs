@@ -112,5 +112,7 @@ pub trait Plugin: Send + Sync {
     
     /// Execute the plugin with given input parameters.
     /// The input should match the parameter schema.
+    ///
+    /// **This is the actual function the LLM will use to call a tool**
     async fn execute(&self, input: Value) -> Result<PluginOutput>;
 }
