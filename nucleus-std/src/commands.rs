@@ -19,6 +19,14 @@ pub struct ExecPlugin {
     allow_dangerous: bool,
 }
 
+impl ExecPlugin {
+    pub fn new() -> Self {
+        Self {
+            allow_dangerous: false,
+        }
+    }
+}
+
 #[async_trait]
 impl Plugin for ExecPlugin {
     fn name(&self) -> &str {
@@ -87,8 +95,17 @@ mod tests {
     use super::*;
 
 
-    #[test]
-    fn ls_command() {
-        
+    #[tokio::test]
+    async fn ls_command() {
+        let plugin = ExecPlugin::new(); 
+
+        let input = serde_json::json!({
+            "command": "ls",
+            "args": ["-la"],
+            "cwd": "src"
+        });
+
+        let result = plugin.execute(input).await;
+        assert!(result.is_ok(), "ls with cwd succeeded")
     }
 }
