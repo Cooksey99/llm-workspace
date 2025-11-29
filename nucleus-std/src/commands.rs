@@ -25,6 +25,16 @@ impl ExecPlugin {
             allow_dangerous: false,
         }
     }
+
+    pub async fn run(&self, command: String, args: Vec<String>, cwd: PathBuf) -> Result<PluginOutput> {
+        let input = serde_json::json!({
+            "command": command,
+            "args": args,
+            "cwd": cwd
+        });
+
+        self.execute(input).await
+    }
 }
 
 #[async_trait]
