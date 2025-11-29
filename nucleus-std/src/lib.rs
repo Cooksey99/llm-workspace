@@ -6,6 +6,7 @@
 //! - Search (text and code search)
 //! - Execution (safe command execution)
 
+mod commands;
 mod files;
 mod search;
 
