@@ -83,7 +83,10 @@ pub struct ChatManager {
 }
 
 impl ChatManager {
-    /// Creates a new chat manager with the given configuration and plugin registry.
+    /// Creates a new chat manager with default configuration.
+    ///
+    /// Creates a non-persistent RAG manager that stores knowledge in memory only.
+    /// For custom RAG configuration (including persistence), use [`with_rag`](Self::with_rag).
     ///
     /// # Arguments
     ///
@@ -106,7 +109,49 @@ impl ChatManager {
     /// ```
     pub fn new(config: Config, registry: Arc<PluginRegistry>) -> Self {
         let ollama = Client::new(&config.llm.base_url);
-        let rag_manager = Rag::with_persistence(&config, ollama.clone());
+        let rag_manager = Rag::new(&config, ollama.clone());
+        
+        Self {
+            config,
+            ollama,
+            registry,
+            rag_manager,
+        }
+    }
+    
+    /// Creates a new chat manager with a custom RAG manager.
+    ///
+    /// This allows full control over RAG configuration, including persistence.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Nucleus configuration including LLM settings
+    /// * `registry` - Plugin registry containing available tools
+    /// * `rag_manager` - Custom RAG manager (e.g., with persistence enabled)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use nucleus_core::{ChatManager, Config, Client, Rag};
+    /// use nucleus_plugin::{PluginRegistry, Permission};
+    /// use std::sync::Arc;
+    ///
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let config = Config::load_or_default();
+    /// let registry = Arc::new(PluginRegistry::new(Permission::READ_ONLY));
+    /// let ollama = Client::new(&config.llm.base_url);
+    /// 
+    /// // Create RAG with persistence
+    /// let rag = Rag::with_persistence(&config, ollama);
+    /// let manager = ChatManager::with_rag(config, registry, rag);
+    /// 
+    /// // Load previously indexed documents
+    /// manager.load_knowledge_base().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_rag(config: Config, registry: Arc<PluginRegistry>, rag_manager: Rag) -> Self {
+        let ollama = Client::new(&config.llm.base_url);
         
         Self {
             config,
