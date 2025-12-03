@@ -8,13 +8,13 @@ pub type ChunkSender = mpsc::UnboundedSender<StreamChunk>;
 pub struct RequestHandler {
     config: Config,
     ollama_client: ollama::Client,
-    rag_manager: rag::Manager,
+    rag_manager: rag::Rag,
 }
 
 impl RequestHandler {
     pub async fn new(config: Config, ollama_client: ollama::Client) -> Self {
-        // Use Qdrant for RAG
-        let rag_manager = rag::Manager::new(&config, ollama_client.clone()).await;
+        // Use Qdrant for RAG (automatic persistence)
+        let rag_manager = rag::Rag::new(&config, ollama_client.clone()).await;
         
         Self {
             config,
