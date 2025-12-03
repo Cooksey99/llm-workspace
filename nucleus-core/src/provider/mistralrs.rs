@@ -3,12 +3,14 @@
 //! This module provides an in-process LLM provider using mistral.rs.
 //! Supports both local GGUF files and automatic HuggingFace downloads.
 
-use super::{types::*, utils::is_local_gguf};
+use super::types::*;
 use async_trait::async_trait;
 use mistralrs::{
-    AnyMoeLoader, GgufLoraModelBuilder, GgufModelBuilder, GgufXLoraModelBuilder, IsqType, LoraModelBuilder, Model, PagedAttentionMetaBuilder, TextMessageRole, TextMessages, TextModelBuilder, VisionModelBuilder, XLoraModelBuilder
+    GgufModelBuilder, IsqType, Model, PagedAttentionMetaBuilder, TextMessageRole, TextMessages,
+    TextModelBuilder,
 };
 use std::path::Path;
+use std::sync::Arc;
 
 /// mistral.rs in-process provider.
 ///
@@ -16,14 +18,16 @@ use std::path::Path;
 /// 1. A local GGUF file path (loads directly)
 /// 2. A HuggingFace model ID (downloads if needed)
 ///
-/// Matches OllamaProvider API for easy swapping.
+/// Note: Use async `new()` - model loading requires async operations.
 pub struct MistralRsProvider {
-    builder: Model,
+    model: Arc<Model>,
     model_name: String,
 }
 
 impl MistralRsProvider {
     /// Creates a new mistral.rs provider.
+    ///
+    /// Downloads and loads the model. This may take time on first use.
     ///
     /// # Model Resolution
     ///
@@ -33,25 +37,30 @@ impl MistralRsProvider {
     /// # Examples
     ///
     /// ```no_run
+    /// # use nucleus_core::provider::MistralRsProvider;
+    /// # async fn example() -> anyhow::Result<()> {
     /// // HuggingFace model (auto-downloads)
-    /// let provider = MistralRsProvider::new("Qwen/Qwen3-0.6B-Instruct");
+    /// let provider = MistralRsProvider::new("Qwen/Qwen3-0.6B-Instruct").await?;
     ///
     /// // Local GGUF file
-    /// let provider = MistralRsProvider::new("./models/qwen3-0.6b.gguf");
+    /// let provider = MistralRsProvider::new("./models/qwen3-0.6b.gguf").await?;
+    /// # Ok(())
+    /// # }
     /// ```
-    pub async fn new(model_name: String) -> Result<Self> {
-        let builder = Self::build_model(&model_name).await.map_err(|e| ProviderError::Other(format!("Unable to build model: {:?}", e)))?;
+    pub async fn new(model_name: impl Into<String>) -> Result<Self> {
+        let model_name = model_name.into();
+        let model = Self::build_model(&model_name).await?;
 
-        let instance = Self {
-            builder: builder,
-            model_name: model_name.into(),
-        };
-
-        Ok(instance)
+        Ok(Self {
+            model: Arc::new(model),
+            model_name,
+        })
     }
 
     async fn build_model(model_name: &str) -> Result<Model> {
-        let model = if is_local_gguf(&model_name) {
+        let is_local_gguf = model_name.ends_with(".gguf") && Path::new(model_name).exists();
+        
+        let model = if is_local_gguf {
             // Extract path and filename to load modal
             let path = Path::new(&model_name);
             let dir = path.parent()
@@ -91,12 +100,6 @@ impl MistralRsProvider {
     
 }
 
-impl Default for MistralRsProvider {
-    fn default() -> Self {
-        // Default to qwen3 0.6B - small, fast, good quality
-        todo!()
-    }
-}
 
 #[async_trait]
 impl Provider for MistralRsProvider {
@@ -105,20 +108,45 @@ impl Provider for MistralRsProvider {
         request: ChatRequest,
         mut callback: Box<dyn FnMut(ChatResponse) + Send + 'a>,
     ) -> Result<()> {
+        // Convert messages to mistral.rs format
+        let mut messages = TextMessages::new();
+        for msg in &request.messages {
+            let role = match msg.role.as_str() {
+                "system" => TextMessageRole::System,
+                "user" => TextMessageRole::User,
+                "assistant" => TextMessageRole::Assistant,
+                _ => TextMessageRole::User,
+            };
+            messages = messages.add_message(role, &msg.content);
+        }
 
-        
-        Err(ProviderError::Other(
-            format!(
-                "MistralRsProvider not yet fully implemented.\n\n\
-                To use mistral.rs:\n\
-                1. Download a model (GGUF format recommended)\n\
-                2. Implement model loading in this provider\n\
-                3. Configure model path in your config\n\n\
-                Requested model: {}\n\n\
-                For now, use OllamaProvider instead.",
-                request.model
-            )
-        ))
+        // Send request and get response
+        let response = self.model
+            .send_chat_request(messages)
+            .await
+            .map_err(|e| ProviderError::Other(format!("Chat request failed: {:?}", e)))?;
+
+        // Extract content from first choice
+        let content = response.choices
+            .first()
+            .and_then(|choice| choice.message.content.as_ref())
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+
+        // Send complete response through callback
+        callback(ChatResponse {
+            model: self.model_name.clone(),
+            content: content.clone(),
+            done: true,
+            message: Message {
+                role: "assistant".to_string(),
+                content,
+                images: None,
+                tool_calls: None,
+            },
+        });
+
+        Ok(())
     }
 
     async fn embed(&self, _text: &str, _model: &str) -> Result<Vec<f32>> {

@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
     registry.register(Arc::new(ReadFilePlugin::new()));
     let registry = Arc::new(registry);
 
-    let manager = ChatManager::new(config, registry);
+    let manager = ChatManager::new(config, registry).await?;
 
     println!("Question: What's on line 7 of config.yaml?\n");
     
