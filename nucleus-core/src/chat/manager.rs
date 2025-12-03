@@ -109,7 +109,7 @@ impl ChatManager {
     /// # }
     /// ```
     pub async fn new(config: Config, registry: Arc<PluginRegistry>) -> Result<Self> {
-        let provider: Arc<dyn Provider> = Arc::new(MistralRsProvider::new(&config.llm.model).await?);
+        let provider: Arc<dyn Provider> = Arc::new(MistralRsProvider::new(config.clone(), Arc::clone(&registry)).await?);
         let rag = Rag::new(&config, provider.clone());
         
         Ok(Self {

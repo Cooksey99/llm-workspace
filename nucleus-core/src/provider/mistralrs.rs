@@ -3,15 +3,17 @@
 //! This module provides an in-process LLM provider using mistral.rs.
 //! Supports both local GGUF files and automatic HuggingFace downloads.
 
+use crate::Config;
+
 use super::types::*;
 use async_trait::async_trait;
 use mistralrs::{
-    Function, GgufModelBuilder, IsqType, Model, RequestBuilder,
-    TextMessageRole, TextMessages, TextModelBuilder, Tool as MistralTool,
-    ToolChoice, ToolType,
+    CalledFunction, Function, GgufModelBuilder, IsqType, Model, RequestBuilder, TextMessageRole, TextMessages, TextModelBuilder, Tool as MistralTool, ToolCallback, ToolChoice, ToolType
 };
+use nucleus_plugin::{Plugin, PluginRegistry};
 use tracing::{debug, info, warn};
 
+use std::fmt::format;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -54,9 +56,9 @@ impl MistralRsProvider {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn new(model_name: impl Into<String>) -> Result<Self> {
-        let model_name = model_name.into();
-        let model = Self::build_model(&model_name).await?;
+    pub async fn new(config: Config, registry: Arc<PluginRegistry>) -> Result<Self> {
+        let model_name = config.llm.model.clone();
+        let model = Self::build_model(config, registry).await?;
 
         Ok(Self {
             model: Arc::new(model),
@@ -64,9 +66,11 @@ impl MistralRsProvider {
         })
     }
 
-    async fn build_model(model_name: &str) -> Result<Model> {
+    async fn build_model(config: Config, registry: Arc<PluginRegistry>) -> Result<Model> {
+        let model_name = config.llm.model;
+
         // Detect model type
-        let is_local_gguf = model_name.ends_with(".gguf") && Path::new(model_name).exists();
+        let is_local_gguf = model_name.ends_with(".gguf") && Path::new(&model_name).exists();
         let is_hf_gguf = model_name.contains(':') && model_name.ends_with(".gguf");
         
         let model = if is_hf_gguf {
@@ -108,10 +112,15 @@ impl MistralRsProvider {
                 .map_err(|e| ProviderError::Other(format!("Failed to load local GGUF '{}': {:?}", model_name, e)))?
         } else {
             // Download from HuggingFace if not cached  
-            TextModelBuilder::new(&model_name)
+            let mut builder = TextModelBuilder::new(&model_name)
                 .with_isq(IsqType::Q4K) // 4-bit quantization
-                .with_logging()
-                .build()
+                .with_logging();
+
+            for plugin in registry.all().into_iter() {
+                builder = builder.with_tool_callback(plugin.name(), plugin_to_callback(plugin));
+            }
+            
+            builder.build()
                 .await
                 .map_err(|e| ProviderError::Other(
                     format!("Failed to load model '{}'. Make sure it exists on HuggingFace or is a valid local .gguf file: {:?}", 
@@ -122,7 +131,27 @@ impl MistralRsProvider {
         Ok(model)
     }
 
-    
+}
+
+/// Convert the nucleus plugin structure to the mistralrs tool structure
+fn plugin_to_callback(plugin: &Arc<dyn Plugin>) -> Arc<ToolCallback> {
+    let plugin = Arc::clone(plugin);
+
+    Arc::new(move |called_fn: &CalledFunction| {
+        // Get arguments from the called function
+        let args: serde_json::Value = serde_json::from_str(&called_fn.arguments)
+            .map_err(|e| ProviderError::Other(format!("Failed to parse tool arguments: {}", e)))?;
+
+        let handle = tokio::runtime::Handle::try_current()
+            .map_err(|e| ProviderError::Other(format!("No tokio runtime available: {}", e)))?;
+
+        let result = handle.block_on(async {
+            plugin.execute(args).await
+        })
+        .map_err(|e| ProviderError::Other(format!("Plugin execution failed: {}", e)))?;
+
+        Ok(result.content)
+    })
 }
 
 

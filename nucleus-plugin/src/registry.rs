@@ -36,6 +36,11 @@ impl PluginRegistry {
         self.plugins.insert(plugin.name().to_string(), plugin);
         true
     }
+
+    /// Get the number plugins that exist in the registry
+    pub fn get_count(&self) -> usize {
+        self.plugins.iter().count()
+    }
     
     /// Get a plugin by name.
     pub fn get(&self, name: &str) -> Option<&Arc<dyn Plugin>> {
@@ -69,7 +74,7 @@ impl PluginRegistry {
                 })
             })
             .collect()
-    }
+    }    
 }
 
 #[cfg(test)]
