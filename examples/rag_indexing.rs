@@ -15,37 +15,19 @@ async fn main() -> anyhow::Result<()> {
     println!("==============================\n");
     
     // Load or create config
-    let mut config = Config::load_or_default();
-    
-    // Check if Qdrant is running, try to start it if not
-    match nucleus_core::qdrant_helper::ensure_qdrant_running(&config.storage.qdrant.url).await {
-        Ok(_) => println!("✓ Connected to Qdrant at {}\n", config.storage.qdrant.url),
-        Err(e) => {
-            eprintln!("{}", e);
-            
-            // Try to auto-start on Windows
-            #[cfg(target_os = "windows")]
-            {
-                let qdrant_path = "C:\\Users\\frigont\\Desktop\\qdrant.exe";
-                if let Ok(_) = nucleus_core::qdrant_helper::try_start_qdrant(qdrant_path) {
-                    // Wait a bit more for startup
-                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                    
-                    // Try connecting again
-                    nucleus_core::qdrant_helper::ensure_qdrant_running(&config.storage.qdrant.url).await?;
-                    println!("✓ Connected to Qdrant\n");
-                } else {
-                    return Err(e);
-                }
-            }
-            
-            #[cfg(not(target_os = "windows"))]
-            return Err(e);
-        }
-    }
+    let config = Config::load_or_default();
     
     println!("Configuration:");
-    println!("  Qdrant URL: {}", config.storage.qdrant.url);
+    match &config.rag.storage {
+        nucleus_core::config::StorageMode::Embedded { path } => {
+            println!("  Storage: Embedded (in-process)");
+            println!("  Path: {}", path);
+        }
+        nucleus_core::config::StorageMode::Remote { url } => {
+            println!("  Storage: Remote server");
+            println!("  URL: {}", url);
+        }
+    }
     println!("  Collection: {}", config.storage.qdrant.collection_name);
     println!("  Embedding Model: {}", config.rag.embedding_model);
     println!("  Chunk Size: {} bytes", config.rag.chunk_size);
@@ -89,9 +71,16 @@ async fn main() -> anyhow::Result<()> {
     println!("AI Response:\n{}\n", response);
     
     println!("\n✓ Example complete!");
-    println!("\nVector database: {} @ {}", config.storage.qdrant.collection_name, config.storage.qdrant.url);
+    match &config.rag.storage {
+        nucleus_core::config::StorageMode::Embedded { path } => {
+            println!("\nVector database: {} (embedded at {})", config.storage.qdrant.collection_name, path);
+        }
+        nucleus_core::config::StorageMode::Remote { url } => {
+            println!("\nVector database: {} @ {}", config.storage.qdrant.collection_name, url);
+        }
+    }
     println!("Knowledge base: {} documents", manager.knowledge_base_count().await);
-    println!("All indexed data persists in Qdrant.");
+    println!("All indexed data persists across restarts.");
     
     Ok(())
 }

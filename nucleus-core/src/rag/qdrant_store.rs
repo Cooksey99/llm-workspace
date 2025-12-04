@@ -4,6 +4,7 @@
 //! that offers automatic deduplication, persistence, and scalability.
 
 use super::types::{Document, SearchResult};
+use crate::config::StorageMode;
 use anyhow::{Context, Result};
 use qdrant_client::{
     Qdrant,
@@ -42,21 +43,53 @@ pub struct QdrantStore {
 impl QdrantStore {
     /// Creates a new Qdrant store and ensures the collection exists.
     ///
+    /// Supports both embedded (in-process, zero setup) and remote (external server) modes.
+    ///
     /// # Arguments
     ///
-    /// * `url` - Qdrant server URL (e.g., "http://localhost:6334")
+    /// * `storage_mode` - Storage mode (embedded with path or remote with URL)
     /// * `collection_name` - Name of the collection to use
     /// * `vector_size` - Dimension of the embedding vectors
     ///
-    /// # Errors
+    /// # Examples
     ///
-    /// Returns an error if connection fails or collection cannot be created.
-    pub async fn new(url: &str, collection_name: &str, vector_size: u64) -> Result<Self> {
-        let client = Arc::new(
-            Qdrant::from_url(url)
-                .build()
-                .context("Failed to connect to Qdrant")?
-        );
+    /// ```ignore
+    /// // Embedded mode (default, zero setup)
+    /// let store = QdrantStore::new(
+    ///     &StorageMode::Embedded { path: "./data/qdrant".into() },
+    ///     "my_collection",
+    ///     384
+    /// ).await?;
+    ///
+    /// // Remote mode (external server)
+    /// let store = QdrantStore::new(
+    ///     &StorageMode::Remote { url: "http://localhost:6334".into() },
+    ///     "my_collection",
+    ///     384
+    /// ).await?;
+    /// ```
+    pub async fn new(
+        storage_mode: &StorageMode,
+        collection_name: &str,
+        vector_size: u64,
+    ) -> Result<Self> {
+        let client = match storage_mode {
+            StorageMode::Embedded { path } => {
+                crate::qdrant_helper::ensure_storage_dir(path)?;
+                Arc::new(
+                    Qdrant::from_path(path)
+                        .build()
+                        .context("Failed to initialize embedded Qdrant")?
+                )
+            }
+            StorageMode::Remote { url } => {
+                Arc::new(
+                    Qdrant::from_url(url)
+                        .build()
+                        .context("Failed to connect to Qdrant server")?
+                )
+            }
+        };
 
         let store = Self {
             client,
@@ -349,9 +382,11 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore] // Requires Qdrant running
-    async fn test_qdrant_store() {
-        let store = QdrantStore::new("http://localhost:6334", "test_collection", 3)
+    async fn test_qdrant_store_embedded() {
+        let storage = StorageMode::Embedded {
+            path: "./test_data/qdrant".to_string(),
+        };
+        let store = QdrantStore::new(&storage, "test_collection", 3)
             .await
             .unwrap();
 
@@ -363,6 +398,28 @@ mod tests {
 
         let results = store.search(&[1.0, 0.0, 0.0], 5).await.unwrap();
         assert_eq!(results.len(), 1);
+
+        store.clear().await.unwrap();
+        
+        // Cleanup
+        let _ = std::fs::remove_dir_all("./test_data");
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires Qdrant server running
+    async fn test_qdrant_store_remote() {
+        let storage = StorageMode::Remote {
+            url: "http://localhost:6334".to_string(),
+        };
+        let store = QdrantStore::new(&storage, "test_collection_remote", 3)
+            .await
+            .unwrap();
+
+        let doc = Document::new("test_1", "Hello world", vec![1.0, 0.0, 0.0]);
+        store.add(doc).await.unwrap();
+
+        let count = store.count().await.unwrap();
+        assert_eq!(count, 1);
 
         store.clear().await.unwrap();
     }

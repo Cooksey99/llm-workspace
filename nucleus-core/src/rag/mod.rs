@@ -99,16 +99,17 @@ pub struct Rag {
 impl Rag {
     /// Creates a new RAG manager with Qdrant vector database.
     ///
-    /// Connects to Qdrant server at the URL specified in config.
+    /// Uses embedded mode by default (zero setup). Can be configured to use
+    /// a remote Qdrant server via config.
     /// Collection will be created automatically if it doesn't exist.
     ///
     /// # Panics
     ///
-    /// Panics if unable to connect to Qdrant server or create collection.
+    /// Panics if unable to initialize vector store or create collection.
     pub async fn new(config: &Config, ollama_client: Client) -> Self {
         let embedder = Embedder::new(ollama_client, &config.rag.embedding_model);
         let store = QdrantStore::new(
-            &config.storage.qdrant.url,
+            &config.rag.storage,
             &config.storage.qdrant.collection_name,
             768, // nomic-embed-text dimension
         )

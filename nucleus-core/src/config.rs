@@ -67,6 +67,9 @@ pub struct RagConfig {
     pub top_k: usize,
     #[serde(default)]
     pub indexer: IndexerConfig,
+    /// Vector database storage mode
+    #[serde(default)]
+    pub storage: StorageMode,
 }
 
 /// Configuration for file indexing behavior.
@@ -96,6 +99,24 @@ impl Default for IndexerConfig {
     }
 }
 
+/// Vector database storage mode
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum StorageMode {
+    /// Embedded storage - runs in-process with zero setup (default)
+    Embedded { path: String },
+    /// Remote storage - connect to external vector database server
+    Remote { url: String },
+}
+
+impl Default for StorageMode {
+    fn default() -> Self {
+        Self::Embedded {
+            path: "./data/qdrant".to_string(),
+        }
+    }
+}
+
 impl Default for RagConfig {
     fn default() -> Self {
         Self {
@@ -104,6 +125,7 @@ impl Default for RagConfig {
             chunk_overlap: 50,
             top_k: 5,
             indexer: IndexerConfig::default(),
+            storage: StorageMode::default(),
         }
     }
 }
@@ -122,8 +144,6 @@ pub struct StorageConfig {
 /// Qdrant vector database configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QdrantConfig {
-    /// Qdrant server URL
-    pub url: String,
     /// Collection name for storing vectors
     pub collection_name: String,
 }
@@ -147,7 +167,6 @@ impl Default for PersonalizationConfig {
 impl Default for QdrantConfig {
     fn default() -> Self {
         Self {
-            url: "http://localhost:6334".to_string(),
             collection_name: "nucleus_kb".to_string(),
         }
     }

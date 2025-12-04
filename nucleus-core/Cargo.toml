@@ -14,7 +14,7 @@ reqwest.workspace = true
 futures.workspace = true
 anyhow.workspace = true
 nucleus-plugin = { path = "../nucleus-plugin" }
-qdrant-client = "1.11"
+qdrant-client = { version = "1.11", default-features = false, features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3.13"
