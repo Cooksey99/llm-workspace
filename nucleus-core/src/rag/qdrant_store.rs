@@ -3,9 +3,11 @@
 //! This module provides integration with Qdrant, a high-performance vector database
 //! that offers automatic deduplication, persistence, and scalability.
 
+use super::store::VectorStore;
 use super::types::{Document, SearchResult};
 use crate::config::StorageMode;
 use anyhow::{Context, Result};
+use async_trait::async_trait;
 use qdrant_client::{
     Qdrant,
     qdrant::{
@@ -40,100 +42,13 @@ pub struct QdrantStore {
     vector_size: u64,
 }
 
-impl QdrantStore {
-    /// Creates a new Qdrant store and ensures the collection exists.
-    ///
-    /// Supports both embedded (in-process, zero setup) and remote (external server) modes.
-    ///
-    /// # Arguments
-    ///
-    /// * `storage_mode` - Storage mode (embedded with path or remote with URL)
-    /// * `collection_name` - Name of the collection to use
-    /// * `vector_size` - Dimension of the embedding vectors
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// // Embedded mode (default, zero setup)
-    /// let store = QdrantStore::new(
-    ///     &StorageMode::Embedded { path: "./data/qdrant".into() },
-    ///     "my_collection",
-    ///     384
-    /// ).await?;
-    ///
-    /// // Remote mode (external server)
-    /// let store = QdrantStore::new(
-    ///     &StorageMode::Remote { url: "http://localhost:6334".into() },
-    ///     "my_collection",
-    ///     384
-    /// ).await?;
-    /// ```
-    pub async fn new(
-        storage_mode: &StorageMode,
-        collection_name: &str,
-        vector_size: u64,
-    ) -> Result<Self> {
-        let client = match storage_mode {
-            StorageMode::Embedded { path } => {
-                crate::qdrant_helper::ensure_storage_dir(path)?;
-                Arc::new(
-                    Qdrant::from_path(path)
-                        .build()
-                        .context("Failed to initialize embedded Qdrant")?
-                )
-            }
-            StorageMode::Remote { url } => {
-                Arc::new(
-                    Qdrant::from_url(url)
-                        .build()
-                        .context("Failed to connect to Qdrant server")?
-                )
-            }
-        };
-
-        let store = Self {
-            client,
-            collection_name: collection_name.to_string(),
-            vector_size,
-        };
-
-        store.ensure_collection().await?;
-
-        Ok(store)
-    }
-
-    /// Ensures the collection exists, creating it if necessary.
-    async fn ensure_collection(&self) -> Result<()> {
-        // Check if collection exists
-        let collections = self
-            .client
-            .collection_exists(&self.collection_name)
-            .await
-            .context("Failed to check collection")?;
-
-        if !collections {
-            // Create collection with cosine distance
-            self.client
-                .create_collection(
-                    CreateCollectionBuilder::new(&self.collection_name)
-                        .vectors_config(VectorsConfig {
-                            config: Some(Config::Params(
-                                VectorParamsBuilder::new(self.vector_size, Distance::Cosine).build()
-                            )),
-                        })
-                )
-                .await
-                .context("Failed to create collection")?;
-        }
-
-        Ok(())
-    }
-
+#[async_trait]
+impl VectorStore for QdrantStore {
     /// Adds or updates a document in the store.
     ///
     /// If a document with the same ID already exists, it will be replaced.
     /// This provides automatic deduplication when re-indexing.
-    pub async fn add(&self, document: Document) -> Result<()> {
+    async fn add(&self, document: Document) -> Result<()> {
         // Store original ID in metadata and use hash as point ID
         // Qdrant requires IDs to be either UUIDs or numbers
         let mut hasher = DefaultHasher::new();
@@ -174,7 +89,7 @@ impl QdrantStore {
     /// # Returns
     ///
     /// A vector of search results, sorted by descending similarity score.
-    pub async fn search(&self, query_embedding: &[f32], top_k: u64) -> Result<Vec<SearchResult>> {
+    async fn search(&self, query_embedding: &[f32], top_k: u64) -> Result<Vec<SearchResult>> {
         let search_result = self
             .client
             .search_points(
@@ -228,7 +143,7 @@ impl QdrantStore {
     }
 
     /// Returns the total number of documents in the collection.
-    pub async fn count(&self) -> Result<usize> {
+    async fn count(&self) -> Result<usize> {
         let info = self
             .client
             .collection_info(&self.collection_name)
@@ -239,7 +154,7 @@ impl QdrantStore {
     }
 
     /// Removes all documents from the collection.
-    pub async fn clear(&self) -> Result<()> {
+    async fn clear(&self) -> Result<()> {
         // Delete the collection
         self.client
             .delete_collection(&self.collection_name)
@@ -256,7 +171,7 @@ impl QdrantStore {
     ///
     /// Scrolls through all documents in the collection and extracts unique
     /// source paths from the metadata.
-    pub async fn get_indexed_paths(&self) -> Result<Vec<String>> {
+    async fn get_indexed_paths(&self) -> Result<Vec<String>> {
         use std::collections::HashSet;
         
         let mut unique_paths = HashSet::new();
@@ -310,7 +225,7 @@ impl QdrantStore {
     /// # Returns
     ///
     /// The number of documents removed.
-    pub async fn remove_by_source(&self, source_path: &str) -> Result<usize> {
+    async fn remove_by_source(&self, source_path: &str) -> Result<usize> {
         use std::path::Path;
         
         // Normalize the path for comparison
@@ -377,41 +292,79 @@ impl QdrantStore {
     }
 }
 
+impl QdrantStore {
+    /// Creates a new Qdrant store and ensures the collection exists.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage_mode` - Storage mode (must be Grpc)
+    /// * `collection_name` - Name of the collection to use
+    /// * `vector_size` - Dimension of the embedding vectors
+    pub async fn new(
+        storage_mode: &StorageMode,
+        collection_name: &str,
+        vector_size: u64,
+    ) -> Result<Self> {
+        let client = match storage_mode {
+            StorageMode::Grpc { url } => {
+                Arc::new(
+                    Qdrant::from_url(url)
+                        .build()
+                        .context("Failed to connect to Qdrant server")?
+                )
+            }
+            _ => {
+                anyhow::bail!("QdrantStore only supports Grpc mode")
+            }
+        };
+
+        let store = Self {
+            client,
+            collection_name: collection_name.to_string(),
+            vector_size,
+        };
+
+        store.ensure_collection().await?;
+
+        Ok(store)
+    }
+
+    async fn ensure_collection(&self) -> Result<()> {
+        let collections = self
+            .client
+            .collection_exists(&self.collection_name)
+            .await
+            .context("Failed to check collection")?;
+
+        if !collections {
+            self.client
+                .create_collection(
+                    CreateCollectionBuilder::new(&self.collection_name)
+                        .vectors_config(VectorsConfig {
+                            config: Some(Config::Params(
+                                VectorParamsBuilder::new(self.vector_size, Distance::Cosine).build()
+                            )),
+                        })
+                )
+                .await
+                .context("Failed to create collection")?;
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_qdrant_store_embedded() {
-        let storage = StorageMode::Embedded {
-            path: "./test_data/qdrant".to_string(),
-        };
-        let store = QdrantStore::new(&storage, "test_collection", 3)
-            .await
-            .unwrap();
-
-        let doc = Document::new("test_1", "Hello world", vec![1.0, 0.0, 0.0]);
-        store.add(doc).await.unwrap();
-
-        let count = store.count().await.unwrap();
-        assert_eq!(count, 1);
-
-        let results = store.search(&[1.0, 0.0, 0.0], 5).await.unwrap();
-        assert_eq!(results.len(), 1);
-
-        store.clear().await.unwrap();
-        
-        // Cleanup
-        let _ = std::fs::remove_dir_all("./test_data");
-    }
-
-    #[tokio::test]
+    // #[tokio::test]
     #[ignore] // Requires Qdrant server running
-    async fn test_qdrant_store_remote() {
-        let storage = StorageMode::Remote {
+    async fn test_qdrant_store_grpc() {
+        let storage = StorageMode::Grpc {
             url: "http://localhost:6334".to_string(),
         };
-        let store = QdrantStore::new(&storage, "test_collection_remote", 3)
+        let store = QdrantStore::new(&storage, "test_collection_grpc", 3)
             .await
             .unwrap();
 

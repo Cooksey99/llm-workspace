@@ -40,7 +40,9 @@
 
 mod embedder;
 mod indexer;
+mod lancedb_store;
 mod qdrant_store;
+mod store;
 mod types;
 pub mod utils;
 
@@ -51,7 +53,8 @@ use crate::config::{Config, IndexerConfig};
 use crate::ollama::Client;
 use embedder::Embedder;
 use indexer::{chunk_text, collect_files};
-use qdrant_store::QdrantStore;
+use store::{create_vector_store, VectorStore};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -89,7 +92,7 @@ pub type Result<T> = std::result::Result<T, RagError>;
 #[derive(Clone)]
 pub struct Rag {
     embedder: Embedder,
-    store: QdrantStore,
+    store: Arc<dyn VectorStore>,
     chunk_size: usize,
     chunk_overlap: usize,
     top_k: usize,
@@ -97,10 +100,10 @@ pub struct Rag {
 }
 
 impl Rag {
-    /// Creates a new RAG manager with Qdrant vector database.
+    /// Creates a new RAG manager with vector database.
     ///
-    /// Uses embedded mode by default (zero setup). Can be configured to use
-    /// a remote Qdrant server via config.
+    /// Uses embedded LanceDB by default (zero setup). Can be configured to use
+    /// a remote Qdrant gRPC server via config.
     /// Collection will be created automatically if it doesn't exist.
     ///
     /// # Panics
@@ -108,13 +111,13 @@ impl Rag {
     /// Panics if unable to initialize vector store or create collection.
     pub async fn new(config: &Config, ollama_client: Client) -> Self {
         let embedder = Embedder::new(ollama_client, &config.rag.embedding_model);
-        let store = QdrantStore::new(
+        let store = create_vector_store(
             &config.rag.storage,
             &config.storage.qdrant.collection_name,
             768, // nomic-embed-text dimension
         )
         .await
-        .expect("Failed to initialize Qdrant store");
+        .expect("Failed to initialize vector store");
         
         Self {
             embedder,

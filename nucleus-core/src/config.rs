@@ -105,8 +105,8 @@ impl Default for IndexerConfig {
 pub enum StorageMode {
     /// Embedded storage - runs in-process with zero setup (default)
     Embedded { path: String },
-    /// Remote storage - connect to external vector database server
-    Remote { url: String },
+    /// gRPC storage - connect to external vector database server
+    Grpc { url: String },
 }
 
 impl Default for StorageMode {
