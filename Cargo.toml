@@ -27,18 +27,28 @@ nucleus-core.workspace = true
 nucleus-plugin.workspace = true
 nucleus-std = { workspace = true, optional = true }
 nucleus-dev = { workspace = true, optional = true }
+async-trait.workspace = true
 
 [features]
 default = ["std"]
 std = ["nucleus-std"]
 dev = ["nucleus-dev"]
 full = ["std", "dev"]
+# GPU acceleration (pass-through to nucleus-core)
+metal = ["nucleus-core/metal"]
+cuda = ["nucleus-core/cuda"]
 
 [dev-dependencies]
 tokio.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+
+# Optimize heavy dependencies even in debug builds
+# This keeps your code fast to compile while making inference fast
+[profile.dev.package."*"]
+opt-level = 2
 
 [workspace.dependencies]
 # Shared dependencies across workspace

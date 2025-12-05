@@ -10,6 +10,13 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     println!("Nucleus - WriteFile Plugin Example\n");
+
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("nucleus_core=debug".parse().unwrap())
+        )
+        .init();
     
     let config = Config::load_or_default();
     
@@ -18,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     registry.register(Arc::new(WriteFilePlugin::new()));
     let registry = Arc::new(registry);
 
-    let manager = ChatManager::new(config, registry);
+    let manager = ChatManager::new(config, registry).await?;
 
     println!("Question: Create a file called 'hello.txt' with the content 'Hello from nucleus!'\n");
     

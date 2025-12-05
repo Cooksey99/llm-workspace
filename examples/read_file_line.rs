@@ -13,6 +13,14 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Initialize tracing subscriber
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("nucleus_core=debug".parse().unwrap())
+        )
+        .init();
+
     println!("Nucleus - AI + Plugin Example\n");
     
     println!("Current dir: {:?}\n", std::env::current_dir()?);
@@ -23,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
     registry.register(Arc::new(ReadFilePlugin::new()));
     let registry = Arc::new(registry);
 
-    let manager = ChatManager::new(config, registry);
+    let manager = ChatManager::new(config, registry).await?;
 
     println!("Question: What's on line 7 of config.yaml?\n");
     
@@ -32,10 +40,4 @@ async fn main() -> anyhow::Result<()> {
     println!("AI Response:\n{}", response);
     
     Ok(())
-
-
-    let mut registry = Arc::new(PluginRegistry::new(Permission::READ_ONLY));
-    registry.register(Arc::new(ReadFilePlugin::new()));
-
-    let manager = ChatManager::new(config, registry);
 }
