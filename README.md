@@ -95,19 +95,13 @@ nucleus = { version = "0.1", features = ["full"] }
 
 ### Vector Database (for RAG)
 
-Nucleus uses [Qdrant](https://qdrant.tech/) for persistent vector storage in RAG (Retrieval Augmented Generation):
+Nucleus supports vector databases for persistent storage in RAG (Retrieval Augmented Generation):
 
-```bash
-# Using Docker
-docker run -p 6334:6334 qdrant/qdrant
-
-# Or install locally: https://qdrant.tech/documentation/quick-start/
-```
-
-Qdrant provides:
 - **Automatic deduplication**: Re-indexing replaces old documents
 - **Persistent storage**: Data survives restarts
-- **Fast vector search**: HNSW indexing for millions of documents
+- **Fast vector search**: Efficient indexing for large codebases
+
+See the configuration documentation for supported backends and setup instructions.
 ## Privacy
 
 All data stays on your machine:
