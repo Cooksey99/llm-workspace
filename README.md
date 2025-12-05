@@ -1,6 +1,5 @@
 # Nucleus
 
-[![Documentation](https://docs.rs/nucleus/badge.svg)](https://docs.rs/nucleus)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A privacy-first, modular AI engine for building customizable developer tooling. Nucleus provides the infrastructure to integrate local or self-hosted LLMs with tool-based capabilities, enabling AI assistants that can interact with files, execute commands, and understand codebases - all without sending data to external services.
