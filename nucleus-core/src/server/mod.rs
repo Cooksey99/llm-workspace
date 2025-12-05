@@ -39,7 +39,7 @@ impl Server {
     pub async fn new(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
         detection::detect_ollama()?;
         
-        let provider: Arc<dyn Provider> = Arc::new(OllamaProvider::new(&config.llm.base_url));
+        let provider: Arc<dyn Provider> = Arc::new(OllamaProvider::new(&config));
         let handler = Arc::new(handler::RequestHandler::new(config, provider).await?);
         let transport = transport::IpcTransport::new(SOCKET_PATH);
         

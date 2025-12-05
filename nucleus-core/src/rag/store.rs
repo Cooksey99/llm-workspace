@@ -5,7 +5,7 @@
 use super::types::{Document, SearchResult};
 use super::qdrant_store::QdrantStore;
 use super::lancedb_store::LanceDbStore;
-use crate::config::{RagConfig, StorageMode};
+use crate::config::{StorageConfig, StorageMode};
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -59,25 +59,27 @@ pub trait VectorStore: Send + Sync {
 ///
 /// # Arguments
 ///
-/// * `config` - RAG configuration including storage mode and top_k
-/// * `collection_name` - Name of the collection/table to use
+/// * `storage_config` - Storage configuration including storage mode and top_k
 /// * `vector_size` - Dimension of the embedding vectors
 ///
 /// # Returns
 ///
 /// A trait object that can be used for all vector store operations.
 pub async fn create_vector_store(
-    config: RagConfig,
-    collection_name: &str,
+    storage_config: StorageConfig,
     vector_size: u64,
 ) -> Result<Arc<dyn VectorStore>> {
-    match config.storage_mode.clone() {
+    match storage_config.storage_mode.clone() {
         StorageMode::Embedded { path } => {
-            let store = LanceDbStore::new(config, &path, collection_name, vector_size.into()).await?;
+            let store = LanceDbStore::new(
+                storage_config,
+                &path,
+                vector_size.into(),
+            ).await?;
             Ok(Arc::new(store))
         }
         StorageMode::Grpc { .. } => {
-            let store = QdrantStore::new(config, collection_name, vector_size).await?;
+            let store = QdrantStore::new(storage_config, vector_size).await?;
             Ok(Arc::new(store))
         }
     }

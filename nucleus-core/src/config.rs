@@ -62,23 +62,16 @@ pub struct LlmConfig {
     pub context_length: usize,
 }
 
-/// Configuration for RAG.
+/// Configuration for RAG processing.
 ///
-/// This includes the actual RAG settings, as well as the storage type (eg. Embedded, gRPC, etc.)
+/// This covers embedding settings and text processing behavior (chunking, indexing).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RagConfig {
     pub embedding_model: String,
     pub chunk_size: usize,
     pub chunk_overlap: usize,
-    pub top_k: usize,
     #[serde(default)]
     pub indexer: IndexerConfig,
-    /// Vector database storage mode
-    #[serde(default)]
-    pub storage_mode: StorageMode,
-    /// Vector database configuration (collection name, etc.)
-    #[serde(default)]
-    pub vector_db: VectorDbConfig,
 }
 
 /// Configuration for file indexing behavior.
@@ -97,6 +90,10 @@ pub struct IndexerConfig {
 
 fn default_exclude_patterns() -> Vec<String> {
     crate::patterns::default_exclude_patterns()
+}
+
+fn default_top_k() -> usize {
+    5
 }
 
 impl Default for IndexerConfig {
@@ -129,25 +126,30 @@ impl Default for StorageMode {
 impl Default for RagConfig {
     fn default() -> Self {
         Self {
-            embedding_model: "nomic-embed-text".to_string(),
+            embedding_model: "google/embeddinggemma-300m".to_string(),
             chunk_size: 512,
             chunk_overlap: 50,
-            top_k: 5,
             indexer: IndexerConfig::default(),
-            storage_mode: StorageMode::default(),
-            vector_db: VectorDbConfig::default(),
         }
     }
 }
 
-/// General storage configuration for non-RAG persistence.
+/// Storage configuration for all persistence.
 ///
-/// This covers chat history, user preferences, tool state, etc.
-/// RAG vector database is configured separately in `RagConfig`.
+/// This includes chat history, tool state, and vector database storage.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageConfig {
     pub chat_history_path: String,
     pub tool_state_path: String,
+    /// Vector database storage mode
+    #[serde(default)]
+    pub storage_mode: StorageMode,
+    /// Vector database configuration (collection name, etc.)
+    #[serde(default)]
+    pub vector_db: VectorDbConfig,
+    /// Number of results to return from vector similarity searches
+    #[serde(default = "default_top_k")]
+    pub top_k: usize,
 }
 
 /// Vector database configuration (collection/index name, etc.).
@@ -189,6 +191,9 @@ impl Default for StorageConfig {
         Self {
             chat_history_path: "./data/history".to_string(),
             tool_state_path: "./data/tool_state".to_string(),
+            storage_mode: StorageMode::default(),
+            vector_db: VectorDbConfig::default(),
+            top_k: default_top_k(),
         }
     }
 }
@@ -261,12 +266,15 @@ mod tests {
         let config = StorageConfig::default();
         assert_eq!(config.chat_history_path, "./data/history");
         assert_eq!(config.tool_state_path, "./data/tool_state");
+        assert_eq!(config.vector_db.collection_name, "nucleus_kb");
+        assert_eq!(config.top_k, 5);
     }
 
     #[test]
-    fn test_rag_config_with_vector_db() {
+    fn test_rag_config_defaults() {
         let config = RagConfig::default();
-        assert_eq!(config.vector_db.collection_name, "nucleus_kb");
-        assert_eq!(config.embedding_model, "nomic-embed-text");
+        assert_eq!(config.embedding_model, "Qwen/Qwen3-Embedding-0.6B");
+        assert_eq!(config.chunk_size, 512);
+        assert_eq!(config.chunk_overlap, 50);
     }
 }

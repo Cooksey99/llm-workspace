@@ -2,7 +2,7 @@
 //!
 //! This module provides integration with LanceDB for embedded, in-process vector storage.
 
-use crate::config::RagConfig;
+use crate::config::StorageConfig;
 
 use super::store::VectorStore;
 use super::types::{Document, SearchResult};
@@ -22,7 +22,7 @@ use std::sync::Arc;
 ///
 /// Provides zero-setup, in-process vector storage using LanceDB.
 pub struct LanceDbStore {
-    config: RagConfig, 
+    storage_config: StorageConfig, 
     conn: Connection,
     table: Table,
     vector_size: u64,
@@ -74,7 +74,7 @@ impl VectorStore for LanceDbStore {
         let table = self.conn.open_table(self.table.name()).execute().await?;
         let results = table
             .query()
-            .limit(self.config.top_k)
+            .limit(self.storage_config.top_k)
             .nearest_to(query_embedding)?
             .execute()
             .await
@@ -262,16 +262,17 @@ impl LanceDbStore {
     ///
     /// # Arguments
     ///
+    /// * `storage_config` - Storage configuration including collection name and top_k
     /// * `path` - Directory path where LanceDB should store data
-    /// * `collection_name` - Name of the table to use
     /// * `vector_size` - Dimension of the embedding vectors
-    pub async fn new(config: RagConfig, path: &str, collection_name: &str, vector_size: u64) -> Result<Self> {
+    pub async fn new(storage_config: StorageConfig, path: &str, vector_size: u64) -> Result<Self> {
         let conn = connect(path)
             .execute()
             .await
             .context("Failed to connect to LanceDB")?;
 
         let table_names = conn.table_names().execute().await?;
+        let collection_name = &storage_config.vector_db.collection_name;
         
         let table = if table_names.contains(&collection_name.to_string()) {
             conn.open_table(collection_name)
@@ -288,7 +289,7 @@ impl LanceDbStore {
         };
 
         Ok(Self {
-            config,
+            storage_config,
             conn,
             table,
             vector_size,

@@ -13,21 +13,24 @@ use std::collections::HashMap;
 pub struct OllamaProvider {
     base_url: String,
     http_client: reqwest::Client,
+    config: crate::Config,
 }
 
 impl OllamaProvider {
-    /// Creates a new Ollama provider with the specified base URL.
-    pub fn new(base_url: impl Into<String>) -> Self {
+    /// Creates a new Ollama provider with the specified config.
+    pub fn new(config: &crate::Config) -> Self {
         Self {
-            base_url: base_url.into(),
+            base_url: config.llm.base_url.clone(),
             http_client: reqwest::Client::new(),
+            config: config.clone(),
         }
     }
 }
 
 impl Default for OllamaProvider {
     fn default() -> Self {
-        Self::new("http://localhost:11434")
+        let config = crate::Config::default();
+        Self::new(&config)
     }
 }
 
@@ -128,11 +131,11 @@ impl Provider for OllamaProvider {
         Ok(())
     }
     
-    async fn embed(&self, text: &str, model: &str) -> Result<Vec<f32>> {
+    async fn embed(&self, text: &str, _model: &str) -> Result<Vec<f32>> {
         let url = format!("{}/api/embed", self.base_url);
         
         let embed_request = EmbedRequest {
-            model: model.to_string(),
+            model: self.config.rag.embedding_model.clone(),
             input: text.to_string(),
         };
         

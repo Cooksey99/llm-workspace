@@ -6,15 +6,17 @@
 use crate::Config;
 
 use super::types::*;
+use anyhow::Context;
 use async_trait::async_trait;
 use mistralrs::{
-    Response, CalledFunction, Function, GgufModelBuilder, IsqType, Model, RequestBuilder, TextMessageRole, TextMessages, TextModelBuilder, Tool as MistralTool, ToolCallback, ToolChoice, ToolType
+    CalledFunction, EmbeddingModelBuilder, Function, GgufModelBuilder, IsqType, Model, PagedAttentionMetaBuilder, RequestBuilder, Response, TextMessageRole, TextMessages, TextModelBuilder, Tool as MistralTool, ToolCallback, ToolChoice, ToolType
 };
 use nucleus_plugin::{Plugin, PluginRegistry};
 use tracing::{debug, info, warn};
 
 use std::path::Path;
 use std::sync::Arc;
+use tokio::sync::OnceCell;
 
 /// mistral.rs in-process provider.
 ///
@@ -27,6 +29,8 @@ pub struct MistralRsProvider {
     model: Arc<Model>,
     model_name: String,
     registry: Arc<PluginRegistry>,
+    config: Config,
+    embedding_model: OnceCell<Arc<Model>>,
 }
 
 impl MistralRsProvider {
@@ -71,6 +75,8 @@ impl MistralRsProvider {
             model: Arc::new(model),
             model_name,
             registry,
+            config: config.clone(),
+            embedding_model: OnceCell::new(),
         })
     }
 
@@ -116,10 +122,16 @@ impl MistralRsProvider {
                 .to_str()
                 .ok_or_else(|| ProviderError::Other("Invalid UTF-8 in filename".to_string()))?;
 
-            GgufModelBuilder::new(dir, vec![filename])
+            let builder = GgufModelBuilder::new(dir, vec![filename])
                 .with_logging()
                 .with_throughput_logging()
-                .build()
+                .with_paged_attn(|| PagedAttentionMetaBuilder::default().build())
+                .context("Unable to build with paged attention")
+                .map_err(|e| ProviderError::Other(
+                    format!("Failed to configure paged attention for model '{}': {:?}", model_name, e)
+                ))?;
+
+            builder.build()
                 .await
                 .map_err(|e| ProviderError::Other(format!("Failed to load local GGUF '{}': {:?}", model_name, e)))?
         } else {
@@ -133,6 +145,12 @@ impl MistralRsProvider {
                 builder = builder.with_tool_callback(plugin.name(), plugin_to_callback(plugin));
             }
             
+            builder = builder.with_paged_attn(|| PagedAttentionMetaBuilder::default().build())
+                .context("Unable to build with paged attention")
+                .map_err(|e| ProviderError::Other(
+                    format!("Failed to configure paged attention for model '{}': {:?}", model_name, e)
+                ))?;
+
             builder.build()
                 .await
                 .map_err(|e| ProviderError::Other(
@@ -333,9 +351,59 @@ impl Provider for MistralRsProvider {
         Ok(())
     }
 
-    async fn embed(&self, _text: &str, _model: &str) -> Result<Vec<f32>> {
-        Err(ProviderError::Other(
-            "Embeddings not yet supported for mistral.rs provider".to_string(),
-        ))
+    async fn embed(&self, text: &str, _model: &str) -> Result<Vec<f32>> {
+        // Lazy load embedding model on first use
+        let embedding_model = self.embedding_model
+            .get_or_try_init(|| async {
+                let model_name = &self.config.rag.embedding_model;
+                info!("Loading embedding model: {}", model_name);
+                
+                let model = EmbeddingModelBuilder::new(model_name)
+                    .with_logging()
+                    .with_throughput_logging()
+                    .build()
+                    .await
+                    .map_err(|e| {
+                        let error_msg = format!("{:?}", e);
+                        
+                        // Check if this is an authentication error
+                        if error_msg.contains("401") || error_msg.contains("Unauthorized") {
+                            ProviderError::Other(format!(
+                                "Failed to load embedding model '{}': Authentication required.\n\n\
+                                This model requires HuggingFace authentication. Choose one option:\n\n\
+                                Option 1 - Set environment variable:\n\
+                                  export HF_TOKEN=\"your_token_here\"\n\
+                                  Get your token at: https://huggingface.co/settings/tokens\n\n\
+                                Option 2 - Create token file:\n\
+                                  mkdir -p ~/.cache/huggingface\n\
+                                  echo \"your_token\" > ~/.cache/huggingface/token\n\n\
+                                Option 3 - Use huggingface-cli (requires Python):\n\
+                                  pip install huggingface-hub\n\
+                                  huggingface-cli login\n\n\
+                                After authenticating, accept the model license at:\n\
+                                  https://huggingface.co/{}\n\n\
+                                Alternatively, update 'embedding_model' in config.yaml to use a non-gated model.",
+                                model_name, model_name
+                            ))
+                        } else {
+                            ProviderError::Other(
+                                format!("Failed to load embedding model '{}': {:?}", model_name, e)
+                            )
+                        }
+                    })?;
+                
+                Ok::<Arc<Model>, ProviderError>(Arc::new(model))
+            })
+            .await?;
+        
+        // Generate embedding
+        let embedding = embedding_model
+            .generate_embedding(text)
+            .await
+            .map_err(|e| ProviderError::Other(
+                format!("Failed to generate embedding: {:?}", e)
+            ))?;
+        
+        Ok(embedding)
     }
 }

@@ -88,14 +88,13 @@ pub type Result<T> = std::result::Result<T, RagError>;
 /// - `rag.embedding_model`: Model for generating embeddings
 /// - `rag.chunk_size`: Size of text chunks in bytes
 /// - `rag.chunk_overlap`: Overlap between chunks in bytes
-/// - `rag.top_k`: Number of results to return from searches
+/// - `storage.top_k`: Number of results to return from searches
 #[derive(Clone)]
 pub struct Rag {
     embedder: Embedder,
     store: Arc<dyn VectorStore>,
     chunk_size: usize,
     chunk_overlap: usize,
-    top_k: usize,
     indexer_config: IndexerConfig,
 }
 
@@ -116,8 +115,7 @@ impl Rag {
     pub async fn new(config: &Config, provider: Arc<dyn Provider>) -> Result<Self> {
         let embedder = Embedder::new(provider, &config.rag.embedding_model);
         let store = create_vector_store(
-            config.rag.clone(),
-            &config.rag.vector_db.collection_name,
+            config.storage.clone(),
             384,
         ).await.map_err(|e| RagError::Retrieval(e.to_string()))?;
         
@@ -126,7 +124,6 @@ impl Rag {
             store,
             chunk_size: config.rag.chunk_size,
             chunk_overlap: config.rag.chunk_overlap,
-            top_k: config.rag.top_k,
             indexer_config: config.rag.indexer.clone(),
         })
     }
