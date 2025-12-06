@@ -1,0 +1,15 @@
+[book]
+title = "Nucleus Documentation"
+authors = ["Cooksey99"]
+language = "en"
+src = "."
+
+[build]
+build-dir = "book"
+[output.html]
+default-theme = "rust"
+git-repository-url = "https://github.com/yourusername/nucleus"
+
+[output.html.playground]
+editable = false
+runnable = false

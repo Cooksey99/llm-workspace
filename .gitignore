@@ -76,3 +76,8 @@ WARP.md
 config.yaml
 
 models/
+
+# mdBook output
+docs/book/
+
+book

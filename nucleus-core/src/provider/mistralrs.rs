@@ -83,41 +83,26 @@ impl MistralRsProvider {
     async fn build_model(config: Config, registry: Arc<PluginRegistry>) -> Result<Model> {
         let model_name = config.llm.model;
 
-        // Detect model type
-        let is_local_gguf = model_name.ends_with(".gguf") && Path::new(&model_name).exists();
-        let is_hf_gguf = !is_local_gguf;
+        // Expand tilde in path if present
+        let expanded_path = if model_name.starts_with('~') {
+            let home = std::env::var("HOME")
+                .map_err(|_| ProviderError::Other("HOME environment variable not set".to_string()))?;
+            model_name.replacen('~', &home, 1)
+        } else {
+            model_name.clone()
+        };
+
+        // Detect model type - prioritize local files first
+        let path_obj = Path::new(&expanded_path);
+        let is_local_file = path_obj.exists() && path_obj.is_file();
         
-        let model = if is_hf_gguf {
-            // Format: "Repo/Model-GGUF:filename.gguf"
-            let parts: Vec<&str> = model_name.split(':').collect();
-            if parts.len() != 2 {
-                return Err(ProviderError::Other(
-                    format!("Invalid GGUF format. Expected 'Repo/Model-GGUF:file.gguf', got '{}'" , model_name)
-                ));
-            }
-            
-            let mut builder = GgufModelBuilder::new(parts[0], vec![parts[1]])
-                .with_logging()
-                .with_throughput_logging();
-
-            for plugin in registry.all().into_iter() {
-                builder = builder.with_tool_callback(plugin.name(), plugin_to_callback(plugin));
-            }
-
-            builder.build()
-                .await
-                .map_err(|e| ProviderError::Other(
-                    format!("Failed to load GGUF '{}' from HuggingFace: {:?}", model_name, e)
-                ))?
-            
-        } else if is_local_gguf {
-            // Extract path and filename to load modal
-            let path = Path::new(&model_name);
-            let dir = path.parent()
+        let model = if is_local_file {
+            // Local GGUF file (any extension, including Ollama blobs)
+            let dir = path_obj.parent()
                 .ok_or_else(|| ProviderError::Other("Invalid GGUF file path".to_string()))?
                 .to_str()
                 .ok_or_else(|| ProviderError::Other("Invalid UTF-8 in path".to_string()))?;
-            let filename = path.file_name()
+            let filename = path_obj.file_name()
                 .ok_or_else(|| ProviderError::Other("Invalid GGUF filename".to_string()))?
                 .to_str()
                 .ok_or_else(|| ProviderError::Other("Invalid UTF-8 in filename".to_string()))?;
@@ -134,16 +119,30 @@ impl MistralRsProvider {
             builder.build()
                 .await
                 .map_err(|e| ProviderError::Other(format!("Failed to load local GGUF '{}': {:?}", model_name, e)))?
+        } else if model_name.contains(':') {
+            // HuggingFace GGUF format: "Repo/Model-GGUF:filename.gguf"
+            let parts: Vec<&str> = model_name.split(':').collect();
+            if parts.len() != 2 {
+                return Err(ProviderError::Other(
+                    format!("Invalid HuggingFace GGUF format. Expected 'Repo/Model-GGUF:file.gguf', got '{}'" , model_name)
+                ));
+            }
+            
+            let builder = GgufModelBuilder::new(parts[0], vec![parts[1]])
+                .with_logging()
+                .with_throughput_logging();
+
+            builder.build()
+                .await
+                .map_err(|e| ProviderError::Other(
+                    format!("Failed to load GGUF '{}' from HuggingFace: {:?}", model_name, e)
+                ))?
         } else {
-            // Download from HuggingFace if not cached  
+            // HuggingFace model (download and quantize on load)
             let mut builder = TextModelBuilder::new(&model_name)
                 .with_isq(IsqType::Q4K) // 4-bit quantization
                 .with_logging()
                 .with_throughput_logging();
-
-            for plugin in registry.all().into_iter() {
-                builder = builder.with_tool_callback(plugin.name(), plugin_to_callback(plugin));
-            }
             
             builder = builder.with_paged_attn(|| PagedAttentionMetaBuilder::default().build())
                 .context("Unable to build with paged attention")
@@ -154,8 +153,7 @@ impl MistralRsProvider {
             builder.build()
                 .await
                 .map_err(|e| ProviderError::Other(
-                    format!("Failed to load model '{}'. Make sure it exists on HuggingFace or is a valid local .gguf file: {:?}", 
-                        model_name, e)
+                    format!("Failed to load model '{}' from HuggingFace: {:?}", model_name, e)
                 ))?
         };
 
@@ -163,28 +161,6 @@ impl MistralRsProvider {
     }
 
 }
-
-/// Convert the nucleus plugin structure to the mistralrs tool structure
-fn plugin_to_callback(plugin: &Arc<dyn Plugin>) -> Arc<ToolCallback> {
-    let plugin = Arc::clone(plugin);
-
-    Arc::new(move |called_fn: &CalledFunction| {
-        // Get arguments from the called function
-        let args: serde_json::Value = serde_json::from_str(&called_fn.arguments)
-            .map_err(|e| ProviderError::Other(format!("Failed to parse tool arguments: {}", e)))?;
-
-        let handle = tokio::runtime::Handle::try_current()
-            .map_err(|e| ProviderError::Other(format!("No tokio runtime available: {}", e)))?;
-
-        let result = handle.block_on(async {
-            plugin.execute(args).await
-        })
-        .map_err(|e| ProviderError::Other(format!("Plugin execution failed: {}", e)))?;
-
-        Ok(result.content)
-    })
-}
-
 
 #[async_trait]
 impl Provider for MistralRsProvider {
@@ -212,6 +188,7 @@ impl Provider for MistralRsProvider {
         let mut builder = RequestBuilder::from(messages);
 
         // Convert plugins to mistral.rs tool definitions
+        // Tool calls are returned in the response for nucleus to execute
         if self.registry.get_count() > 0 {
             let plugins = self.registry.all();
             info!(plugin_count = plugins.len(), "Converting plugins to mistral.rs tools");
@@ -262,8 +239,7 @@ impl Provider for MistralRsProvider {
             builder = builder.set_tools(mistral_tools).set_tool_choice(ToolChoice::Auto);
         }
 
-        // Stream request with timeout to prevent hangs
-        debug!("Starting streaming chat request to mistral.rs");
+        // Stream request
         let timeout_duration = std::time::Duration::from_secs(60);
         let mut stream = tokio::time::timeout(
             timeout_duration,
@@ -278,13 +254,23 @@ impl Provider for MistralRsProvider {
         })?
         .map_err(|e| ProviderError::Other(format!("Failed to create stream: {:?}", e)))?;
         
-        debug!("Streaming response from mistral.rs");
         let mut accumulated_content = String::new();
         let mut final_tool_calls = None;
         let mut message_role = String::from("assistant"); // Default, will be updated from stream
 
-        // Process stream chunks
-        while let Some(chunk) = stream.next().await {
+        // Process stream chunks with timeout per chunk to avoid hangs
+        let chunk_timeout = std::time::Duration::from_secs(30);
+        loop {
+            let next_fut = stream.next();
+            let chunk_opt = tokio::time::timeout(chunk_timeout, next_fut)
+                .await
+                .map_err(|_| {
+                    warn!("Stream chunk timed out after {} seconds", chunk_timeout.as_secs());
+                    ProviderError::Other(
+                        format!("No response chunk received after {} seconds. Generation stalled.", chunk_timeout.as_secs())
+                    )
+                })?;
+            let Some(chunk) = chunk_opt else { break; };
             match chunk {
                 Response::Chunk(resp) => {
                     if let Some(choice) = resp.choices.first() {
@@ -303,6 +289,7 @@ impl Provider for MistralRsProvider {
                                 message: Message {
                                     role: message_role.clone(),
                                     content: accumulated_content.clone(),
+                                    context: None,
                                     images: None,
                                     tool_calls: None,
                                 },
@@ -326,12 +313,9 @@ impl Provider for MistralRsProvider {
                     }
                 }
                 Response::Done(_) => {
-                    debug!("Stream complete");
                     break;
                 }
-                _ => {
-                    debug!("Received other response type in stream");
-                }
+                _ => {}
             }
         }
 
@@ -343,6 +327,7 @@ impl Provider for MistralRsProvider {
             message: Message {
                 role: message_role,
                 content: accumulated_content,
+                context: None,
                 images: None,
                 tool_calls: final_tool_calls,
             },

@@ -109,16 +109,41 @@ impl ChatManager {
     /// # }
     /// ```
     pub async fn new(config: Config, registry: PluginRegistry) -> Result<Self> {
-        let registry = Arc::new(registry);
-        let provider: Arc<dyn Provider> = Arc::new(MistralRsProvider::new(&config, Arc::clone(&registry)).await?);
-        let rag = Rag::new(&config, provider.clone()).await?;
+        Self::builder(config, registry).build().await
+    }
 
-        Ok(Self {
-            config,
-            provider,
-            registry,
-            rag,
-        })
+    /// Creates a builder for configuring the chat manager.
+    ///
+    /// The builder allows overriding LLM and embedding models while preserving
+    /// other configuration from the provided `Config`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use nucleus_core::{ChatManager, Config};
+    /// use nucleus_plugin::{PluginRegistry, Permission};
+    ///
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let config = Config::load_or_default();
+    /// let registry = PluginRegistry::new(Permission::READ_ONLY);
+    ///
+    /// // Override LLM model
+    /// let manager = ChatManager::builder(config.clone(), registry.clone())
+    ///     .with_llm_model("Qwen/Qwen3-1.6B-Instruct")
+    ///     .build()
+    ///     .await?;
+    ///
+    /// // Override both LLM and embedding models
+    /// let manager = ChatManager::builder(config, registry)
+    ///     .with_llm_model("Qwen/Qwen3-1.6B-Instruct")
+    ///     .with_embedding_model("BAAI/bge-small-en-v1.5")
+    ///     .build()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn builder(config: Config, registry: PluginRegistry) -> ChatManagerBuilder {
+        ChatManagerBuilder::new(config, registry)
     }
     
     ///
@@ -314,36 +339,42 @@ impl ChatManager {
         F: FnMut(&str) + Send,
     {
         // Retrieve relevant context from knowledge base if available
-        let context = if self.rag.count().await > 0 {
+        let rag_count = self.rag.count().await;
+        debug!("RAG knowledge base has {} documents", rag_count);
+        
+        // Context retrieved from RAG
+        let context = if rag_count > 0 {
+            debug!("Retrieving RAG context for query: {}", user_message);
             self.rag.retrieve_context(user_message).await
                 .unwrap_or_else(|e| {
                     debug!("Could not retrieve RAG context: {}", e);
                     String::new()
                 })
         } else {
+            debug!("RAG knowledge base is empty, skipping context retrieval");
             String::new()
         };
         
         // Construct user message with context if available
         let enhanced_message = if !context.is_empty() {
+            debug!("Enhanced message with {} characters of RAG context", context.len());
             format!("{}{}", context, user_message)
         } else {
+            debug!("No RAG context available, using original message");
             user_message.to_string()
         };
         
-        let mut messages = vec![Message::user(&enhanced_message)];
+        let mut messages = vec![Message::user(Some(context.clone()), &enhanced_message)];
 
         let tools = self.build_tools();
 
         loop {
-            debug!(message_count = messages.len(), tool_count = tools.len(), "Building chat request");
             let mut request = ChatRequest::new(&self.config.llm.model, messages.clone())
                 .with_temperature(self.config.llm.temperature);
 
             if !tools.is_empty() {
                 request.tools = Some(tools.clone());
             }
-            debug!("Sending request to provider");
 
             // Stream the LLM response, accumulating content and preserving tool calls.
             // Important: Tool calls may arrive in early chunks while content streams,
@@ -353,8 +384,6 @@ impl ChatManager {
             let mut tool_calls: Option<Vec<ToolCall>> = None;
             self.provider
                 .chat(request, Box::new(|response| {
-                    debug!(done = response.done, "Received response chunk from provider");
-                    
                     // Call user's streaming callback with incremental content
                     if !response.done && !response.content.is_empty() {
                         on_chunk(&response.content);
@@ -366,15 +395,13 @@ impl ChatManager {
                     // Preserve tool calls from any chunk - they typically arrive early
                     // in the stream and may be absent from the final done=true chunk
                     if let Some(ref tool_calls_ref) = response.message.tool_calls {
-                        debug!(tool_call_count = tool_calls_ref.len(), "Received tool calls in response");
-                        tool_calls = response.message.tool_calls.clone();
+                        tool_calls = Some(tool_calls_ref.clone());
                     }
                     
                     current_response = Some(response);
                 }))
                 .await
                 .context("Failed to get LLM response")?;
-            debug!("Provider completed request");
 
             let mut response = current_response
                 .context("No response from LLM")?;
@@ -386,10 +413,10 @@ impl ChatManager {
 
             // Handle tool calls: execute each tool and add results to conversation
             if let Some(tool_calls) = &assistant_message.tool_calls {
-                info!(tool_call_count = tool_calls.len(), "Processing tool calls from LLM");
                 // Add the assistant's message with tool calls to conversation history
                 messages.push(Message {
                     role: "assistant".to_string(),
+                    context: Some(context.to_string()),
                     content: assistant_message.content.clone(),
                     images: None,
                     tool_calls: Some(tool_calls.clone()),
@@ -410,6 +437,7 @@ impl ChatManager {
                     // Add tool result as a message for the LLM to synthesize
                     messages.push(Message {
                         role: "tool".to_string(),
+                        context: Some(context.to_string()),
                         content: result.content,
                         images: None,
                         tool_calls: None,
@@ -453,5 +481,172 @@ impl ChatManager {
                 }
             })
             .collect()
+    }
+}
+
+/// Builder for configuring and creating a `ChatManager`.
+///
+/// This builder provides a fluent API for customizing LLM and embedding models
+/// while maintaining sensible defaults from the config.
+///
+/// # Examples
+///
+/// ```no_run
+/// use nucleus_core::{ChatManager, Config};
+/// use nucleus_plugin::{PluginRegistry, Permission};
+///
+/// # async fn example() -> anyhow::Result<()> {
+/// let config = Config::load_or_default();
+/// let registry = PluginRegistry::new(Permission::READ_ONLY);
+///
+/// // Use defaults from config
+/// let manager = ChatManager::builder(config.clone(), registry.clone())
+///     .build()
+///     .await?;
+///
+/// // Override LLM model
+/// let manager = ChatManager::builder(config.clone(), registry.clone())
+///     .with_llm_model("Qwen/Qwen3-1.6B-Instruct")
+///     .build()
+///     .await?;
+///
+/// // Override embedding model
+/// let manager = ChatManager::builder(config.clone(), registry.clone())
+///     .with_embedding_model("Qwen/Qwen3-Embedding-0.6B")
+///     .build()
+///     .await?;
+///
+/// // Override both
+/// let manager = ChatManager::builder(config, registry)
+///     .with_llm_model("Qwen/Qwen3-1.6B-Instruct")
+///     .with_embedding_model("Qwen/Qwen3-Embedding-0.6B")
+///     .build()
+///     .await?;
+/// # Ok(())
+/// # }
+/// ```
+pub struct ChatManagerBuilder {
+    config: Config,
+    registry: PluginRegistry,
+    llm_model_override: Option<String>,
+    embedding_model_override: Option<String>,
+}
+
+impl ChatManagerBuilder {
+    /// Creates a new builder with the given config and registry.
+    pub fn new(config: Config, registry: PluginRegistry) -> Self {
+        Self {
+            config,
+            registry,
+            llm_model_override: None,
+            embedding_model_override: None,
+        }
+    }
+
+    /// Override the default LLM model from the configuration.
+    ///
+    /// Accepts a model identifier, which may be:
+    /// - A Hugging Face repo ID: `"Qwen/Qwen3-1.6B-Instruct"`
+    /// - A local GGUF path: `"/path/to/model.gguf"`
+    /// - A quantized model name: `"TheBloke/Llama-2-7B-Chat-GGUF"`
+    ///
+    /// # Examples
+    ///
+    /// **Hugging Face model**
+    /// ```
+    /// # use nucleus_core::{ChatManager, Config};
+    /// # use nucleus_plugin::{PluginRegistry, Permission};
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let manager = ChatManager::builder(Config::load_or_default(), PluginRegistry::new(Permission::READ_ONLY))
+    ///     .with_llm_model("Qwen/Qwen3-1.6B-Instruct")
+    ///     .build()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// **Local GGUF model**
+    /// ```
+    /// # use nucleus_core::{ChatManager, Config};
+    /// # use nucleus_plugin::{PluginRegistry, Permission};
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let manager = ChatManager::builder(Config::load_or_default(), PluginRegistry::new(Permission::READ_ONLY))
+    ///     .with_llm_model("/Users/alice/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf")
+    ///     .build()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ````
+    /// 
+    /// **Local GGUF Blob (Ollama) — NOT CURRENTLY SUPPORTED**
+    /// ```
+    /// let manager = ChatManager::builder(config, registry)
+    ///     .with_llm_model("~/.ollama/models/blobs/sha256-0d003f6662faee786ed5da3e31b29c978de5ae5d275c8794c606a7f3c01aa8f5")  // Q4_K_M
+    ///     .build()
+    ///     .await?;
+    /// ```
+    pub fn with_llm_model(mut self, model: impl Into<String>) -> Self {
+        self.llm_model_override = Some(model.into());
+        self
+    }
+
+    /// Override the embedding model from config.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - Embedding model identifier (HuggingFace repo, GGUF path, etc.)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use nucleus_core::{ChatManager, Config};
+    /// # use nucleus_plugin::{PluginRegistry, Permission};
+    /// # async fn example() -> anyhow::Result<()> {
+    /// # let config = Config::load_or_default();
+    /// # let registry = PluginRegistry::new(Permission::READ_ONLY);
+    /// let manager = ChatManager::builder(config, registry)
+    ///     .with_embedding_model("Qwen/Qwen3-Embedding-0.6B")
+    ///     .build()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_embedding_model(mut self, model: impl Into<String>) -> Self {
+        self.embedding_model_override = Some(model.into());
+        self
+    }
+
+    /// Builds the `ChatManager` with the configured settings.
+    ///
+    /// This initializes the provider with the (possibly overridden) LLM model,
+    /// and the RAG system with the (possibly overridden) embedding model.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The provider fails to initialize
+    /// - The RAG system fails to initialize
+    pub async fn build(self) -> Result<ChatManager> {
+        let mut config = self.config;
+
+        if let Some(llm_model) = self.llm_model_override {
+            config.llm.model = llm_model;
+        }
+        if let Some(embedding_model) = self.embedding_model_override {
+            config.rag.embedding_model = embedding_model;
+        }
+
+        let registry = Arc::new(self.registry);
+        let provider: Arc<dyn Provider> = Arc::new(
+            MistralRsProvider::new(&config, Arc::clone(&registry)).await?
+        );
+        let rag = Rag::new(&config, provider.clone()).await?;
+
+        Ok(ChatManager {
+            config,
+            provider,
+            registry,
+            rag,
+        })
     }
 }

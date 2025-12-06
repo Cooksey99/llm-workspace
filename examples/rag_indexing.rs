@@ -7,7 +7,7 @@
 
 use nucleus_core::{ChatManager, Config};
 use nucleus_plugin::{PluginRegistry, Permission};
-use std::sync::Arc;
+use std::path::Path;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
     print_rag_config(&config);
     
     let registry = PluginRegistry::new(Permission::READ_WRITE);
-    let manager = ChatManager::new(config.clone(), registry).await;
+    let manager = ChatManager::new(config.clone(), registry).await?;
     
     let doc_count = manager.knowledge_base_count().await;
     println!("Current knowledge base: {} documents\n", doc_count);
@@ -54,7 +54,8 @@ async fn index_example_directory(manager: &ChatManager) {
     println!("=== Indexing Example ===");
     println!("Indexing nucleus-core/src directory...\n");
     
-    match manager.index_directory("./nucleus-core/src").await {
+    let path = Path::new("./nucleus-core/src");
+    match manager.index_directory(path).await {
         Ok(count) => {
             let total = manager.knowledge_base_count().await;
             println!("\n✓ Indexed {} files ({} total documents)\n", count, total);
