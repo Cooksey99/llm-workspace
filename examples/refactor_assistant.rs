@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     
     // Step 4: Create ChatManager (orchestrates LLM + tools)
-    let manager = ChatManager::new(config, Arc::new(registry)).await?;
+    let manager = ChatManager::new(config, registry).await?;
     
     // Step 5: Ask the AI to perform refactoring
     println!("Query: Read config.rs and create a backup\n");
