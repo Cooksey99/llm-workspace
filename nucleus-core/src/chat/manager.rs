@@ -540,26 +540,47 @@ impl ChatManagerBuilder {
         }
     }
 
-    /// Override the LLM model from config.
+    /// Override the default LLM model from the configuration.
     ///
-    /// # Arguments
-    ///
-    /// * `model` - Model identifier (HuggingFace repo, GGUF path, etc.)
+    /// Accepts a model identifier, which may be:
+    /// - A Hugging Face repo ID: `"Qwen/Qwen3-1.6B-Instruct"`
+    /// - A local GGUF path: `"/path/to/model.gguf"`
+    /// - A quantized model name: `"TheBloke/Llama-2-7B-Chat-GGUF"`
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// **Hugging Face model**
+    /// ```
     /// # use nucleus_core::{ChatManager, Config};
     /// # use nucleus_plugin::{PluginRegistry, Permission};
     /// # async fn example() -> anyhow::Result<()> {
-    /// # let config = Config::load_or_default();
-    /// # let registry = PluginRegistry::new(Permission::READ_ONLY);
-    /// let manager = ChatManager::builder(config, registry)
+    /// let manager = ChatManager::builder(Config::load_or_default(), PluginRegistry::new(Permission::READ_ONLY))
     ///     .with_llm_model("Qwen/Qwen3-1.6B-Instruct")
     ///     .build()
     ///     .await?;
     /// # Ok(())
     /// # }
+    /// ```
+    ///
+    /// **Local GGUF model**
+    /// ```
+    /// # use nucleus_core::{ChatManager, Config};
+    /// # use nucleus_plugin::{PluginRegistry, Permission};
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let manager = ChatManager::builder(Config::load_or_default(), PluginRegistry::new(Permission::READ_ONLY))
+    ///     .with_llm_model("/Users/alice/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf")
+    ///     .build()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ````
+    /// 
+    /// **Local GGUF (Ollama or direct path)**
+    /// ```
+    /// let manager = ChatManager::builder(config, registry)
+    ///     .with_llm_model("~/.ollama/models/blobs/sha256-0d003f6662faee786ed5da3e31b29c978de5ae5d275c8794c606a7f3c01aa8f5")  // Q4_K_M
+    ///     .build()
+    ///     .await?;
     /// ```
     pub fn with_llm_model(mut self, model: impl Into<String>) -> Self {
         self.llm_model_override = Some(model.into());

@@ -83,41 +83,26 @@ impl MistralRsProvider {
     async fn build_model(config: Config, registry: Arc<PluginRegistry>) -> Result<Model> {
         let model_name = config.llm.model;
 
-        // Detect model type
-        let is_local_gguf = model_name.ends_with(".gguf") && Path::new(&model_name).exists();
-        let is_hf_gguf = !is_local_gguf;
+        // Expand tilde in path if present
+        let expanded_path = if model_name.starts_with('~') {
+            let home = std::env::var("HOME")
+                .map_err(|_| ProviderError::Other("HOME environment variable not set".to_string()))?;
+            model_name.replacen('~', &home, 1)
+        } else {
+            model_name.clone()
+        };
+
+        // Detect model type - prioritize local files first
+        let path_obj = Path::new(&expanded_path);
+        let is_local_file = path_obj.exists() && path_obj.is_file();
         
-        let model = if is_hf_gguf {
-            // Format: "Repo/Model-GGUF:filename.gguf"
-            let parts: Vec<&str> = model_name.split(':').collect();
-            if parts.len() != 2 {
-                return Err(ProviderError::Other(
-                    format!("Invalid GGUF format. Expected 'Repo/Model-GGUF:file.gguf', got '{}'" , model_name)
-                ));
-            }
-            
-            let mut builder = GgufModelBuilder::new(parts[0], vec![parts[1]])
-                .with_logging()
-                .with_throughput_logging();
-
-            for plugin in registry.all().into_iter() {
-                builder = builder.with_tool_callback(plugin.name(), plugin_to_callback(plugin));
-            }
-
-            builder.build()
-                .await
-                .map_err(|e| ProviderError::Other(
-                    format!("Failed to load GGUF '{}' from HuggingFace: {:?}", model_name, e)
-                ))?
-            
-        } else if is_local_gguf {
-            // Extract path and filename to load modal
-            let path = Path::new(&model_name);
-            let dir = path.parent()
+        let model = if is_local_file {
+            // Local GGUF file (any extension, including Ollama blobs)
+            let dir = path_obj.parent()
                 .ok_or_else(|| ProviderError::Other("Invalid GGUF file path".to_string()))?
                 .to_str()
                 .ok_or_else(|| ProviderError::Other("Invalid UTF-8 in path".to_string()))?;
-            let filename = path.file_name()
+            let filename = path_obj.file_name()
                 .ok_or_else(|| ProviderError::Other("Invalid GGUF filename".to_string()))?
                 .to_str()
                 .ok_or_else(|| ProviderError::Other("Invalid UTF-8 in filename".to_string()))?;
@@ -134,8 +119,30 @@ impl MistralRsProvider {
             builder.build()
                 .await
                 .map_err(|e| ProviderError::Other(format!("Failed to load local GGUF '{}': {:?}", model_name, e)))?
+        } else if model_name.contains(':') {
+            // HuggingFace GGUF format: "Repo/Model-GGUF:filename.gguf"
+            let parts: Vec<&str> = model_name.split(':').collect();
+            if parts.len() != 2 {
+                return Err(ProviderError::Other(
+                    format!("Invalid HuggingFace GGUF format. Expected 'Repo/Model-GGUF:file.gguf', got '{}'" , model_name)
+                ));
+            }
+            
+            let mut builder = GgufModelBuilder::new(parts[0], vec![parts[1]])
+                .with_logging()
+                .with_throughput_logging();
+
+            for plugin in registry.all().into_iter() {
+                builder = builder.with_tool_callback(plugin.name(), plugin_to_callback(plugin));
+            }
+
+            builder.build()
+                .await
+                .map_err(|e| ProviderError::Other(
+                    format!("Failed to load GGUF '{}' from HuggingFace: {:?}", model_name, e)
+                ))?
         } else {
-            // Download from HuggingFace if not cached  
+            // HuggingFace model (download and quantize on load)
             let mut builder = TextModelBuilder::new(&model_name)
                 .with_isq(IsqType::Q4K) // 4-bit quantization
                 .with_logging()
@@ -154,8 +161,7 @@ impl MistralRsProvider {
             builder.build()
                 .await
                 .map_err(|e| ProviderError::Other(
-                    format!("Failed to load model '{}'. Make sure it exists on HuggingFace or is a valid local .gguf file: {:?}", 
-                        model_name, e)
+                    format!("Failed to load model '{}' from HuggingFace: {:?}", model_name, e)
                 ))?
         };
 
