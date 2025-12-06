@@ -1,4 +1,4 @@
-use std::path::Path;
+// The initial indexing in this example can take a few minutes
 
 use nucleus::{ChatManager, Config};
 use nucleus_plugin::{Permission, PluginRegistry};
@@ -6,11 +6,11 @@ use nucleus_plugin::{Permission, PluginRegistry};
 
 #[tokio::main]
 async fn main() {
-    // Disable instrusive logs during messaging
+    // Enable detailed logs during indexing
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("nucleus_core=info".parse().unwrap())
+                .add_directive("nucleus_core=off".parse().unwrap())
                 .add_directive("mistralrs_core=off".parse().unwrap())
         )
         .init();
@@ -36,7 +36,7 @@ async fn main() {
 
     let path = dirs::home_dir()
         .ok_or("Home directory missing").unwrap()
-        .join("development/nucleus");
+        .join("development/nucleus/nucleus-core/src");
     println!("Path: {}", path.display());
     
     match manager.index_directory(&path).await {

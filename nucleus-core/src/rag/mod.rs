@@ -161,8 +161,14 @@ impl Rag {
         chunk_batch: &mut Vec<String>,
         chunk_metadata: &mut Vec<(String, String, String, usize)>,
     ) -> Result<()> {
+        use tracing::info;
+        
+        info!("Processing batch of {} chunks", chunk_batch.len());
         let chunk_refs: Vec<&str> = chunk_batch.iter().map(|s| s.as_str()).collect();
+        
+        info!("Calling embed_batch for {} texts", chunk_refs.len());
         let embeddings = self.embedder.embed_batch(&chunk_refs).await?;
+        info!("Received {} embeddings", embeddings.len());
         
         for (embedding, (id, content, source, chunk_idx)) in embeddings.into_iter().zip(chunk_metadata.drain(..)) {
             let document = Document::new(id, content, embedding)
@@ -172,6 +178,7 @@ impl Rag {
             self.store.add(document).await.map_err(|e| RagError::Retrieval(e.to_string()))?;
         }
         
+        info!("Batch processed successfully");
         chunk_batch.clear();
         Ok(())
     }
@@ -202,6 +209,14 @@ impl Rag {
     ///
     pub async fn index_directory(&self, dir_path: &Path) -> Result<usize> {
         let files = collect_files(dir_path, &self.indexer_config).await?;
+        
+        use tracing::{info, debug};
+        info!("Found {} files to index", files.len());
+        for file in &files {
+            debug!(target: "nucleus_core::rag", file = %file.path.display(), "File queued for indexing");
+        }
+        info!("Starting indexing...");
+        
         let mut indexed_count = 0;
         
         const BATCH_SIZE: usize = 32;

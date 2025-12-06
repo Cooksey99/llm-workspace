@@ -232,8 +232,6 @@ impl Config {
         let mut config: Config = serde_yaml::from_str(&contents)?;
 
         config.permission = Permission::default();
-        config.rag = RagConfig::default();
-        config.personalization = PersonalizationConfig::default();
 
         Ok(config)
     }

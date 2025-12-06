@@ -96,9 +96,15 @@ impl Embedder {
     ///
     /// Returns an error if any embedding generation fails.
     pub async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
-        self.provider
+        use tracing::info;
+        
+        info!("Embedder::embed_batch called with {} texts", texts.len());
+        let result = self.provider
             .embed_batch(texts, &self.model)
             .await
-            .map_err(EmbedderError::Provider)
+            .map_err(EmbedderError::Provider)?;
+        info!("Embedder::embed_batch completed, got {} embeddings", result.len());
+        
+        Ok(result)
     }
 }
