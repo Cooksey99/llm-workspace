@@ -20,12 +20,13 @@ pub mod provider;
 pub mod qdrant_helper;
 pub mod rag;
 pub mod server;
+pub mod utils;
 
 // Public exports
 pub use chat::{ChatManager, ChatManagerBuilder};
 pub use config::{Config, IndexerConfig};
 pub use detection::{check_ollama_silent, detect_ollama, DetectionError, OllamaInfo};
-pub use rag::Rag;
+pub use rag::RagEngine;
 pub use server::Server;
 
 // Provider exports

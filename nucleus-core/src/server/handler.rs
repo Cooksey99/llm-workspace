@@ -9,12 +9,12 @@ pub type ChunkSender = mpsc::UnboundedSender<StreamChunk>;
 pub struct RequestHandler {
     config: Config,
     provider: Arc<dyn Provider>,
-    rag_manager: rag::Rag,
+    rag_manager: rag::RagEngine,
 }
 
 impl RequestHandler {
     pub async fn new(config: Config, provider: Arc<dyn Provider>) -> Result<Self, rag::RagError> {
-        let rag_manager = rag::Rag::new(&config, provider.clone()).await?;
+        let rag_manager = rag::RagEngine::new(&config, provider.clone()).await?;
         
         Ok(Self {
             config,

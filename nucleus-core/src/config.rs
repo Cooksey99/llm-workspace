@@ -19,8 +19,8 @@ pub type Result<T> = std::result::Result<T, ConfigError>;
 /// This includes the LLM model itself, as well as the features and customization you want it have
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub llm: LlmConfig,
     pub system_prompt: String,
+    pub llm: LlmConfig,
     pub rag: RagConfig,
     pub storage: StorageConfig,
     pub personalization: PersonalizationConfig,
@@ -86,6 +86,12 @@ pub struct IndexerConfig {
     /// Default excludes: build artifacts, version control, package managers, temp files
     #[serde(default = "default_exclude_patterns")]
     pub exclude_patterns: Vec<String>,
+
+    /// Size of text chunks in bytes for splitting documents
+    pub chunk_size: usize,
+
+    /// Overlap between consecutive chunks in bytes
+    pub chunk_overlap: usize,
 }
 
 fn default_exclude_patterns() -> Vec<String> {
@@ -101,6 +107,8 @@ impl Default for IndexerConfig {
         Self {
             extensions: Vec::new(), // Empty = index all text files
             exclude_patterns: default_exclude_patterns(),
+            chunk_size: 512,
+            chunk_overlap: 50,
         }
     }
 }

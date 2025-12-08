@@ -29,7 +29,7 @@
 
 use crate::config::Config;
 use crate::provider::{ChatRequest, ChatResponse, Message, MistralRsProvider, Provider, Tool, ToolCall, ToolFunction};
-use crate::rag::Rag;
+use crate::rag::RagEngine;
 use nucleus_plugin::PluginRegistry;
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -80,7 +80,7 @@ pub struct ChatManager {
     /// Registry for available plugins/tools
     registry: Arc<PluginRegistry>,
     /// RAG manager for knowledge base integration (with persistent storage)
-    rag: Rag,
+    rag_engine: RagEngine,
 }
 
 impl ChatManager {
@@ -165,7 +165,7 @@ impl ChatManager {
     /// # }
     /// ```
     pub async fn with_provider(mut self, provider: Arc<dyn Provider>) -> Result<Self> {
-        self.rag = Rag::new(&self.config, provider.clone()).await?;
+        self.rag_engine = RagEngine::new(&self.config, provider.clone()).await?;
         self.provider = provider;
         Ok(self)
     }
@@ -175,7 +175,7 @@ impl ChatManager {
     /// # Examples
     ///
     /// ```no_run
-    /// # use nucleus_core::{ChatManager, Config, Rag};
+    /// # use nucleus_core::{ChatManager, Config, RagEngine};
     /// # use nucleus_plugin::{PluginRegistry, Permission};
     /// # use std::sync::Arc;
     ///
@@ -184,14 +184,14 @@ impl ChatManager {
     /// let registry = PluginRegistry::new(Permission::READ_ONLY);
     /// let provider = Arc::new(/* create provider */);
     /// 
-    /// let custom_rag = Rag::new(&config, provider).await?;
+    /// let custom_rag = RagEngine::new(&config, provider).await?;
     /// let manager = ChatManager::new(config, registry).await?
     ///     .with_rag(custom_rag);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn with_rag(mut self, rag: Rag) -> Self {
-        self.rag = rag;
+    pub fn with_rag(mut self, rag: RagEngine) -> Self {
+        self.rag_engine = rag;
         self
     }
     
@@ -222,7 +222,7 @@ impl ChatManager {
     /// # }
     /// ```
     pub async fn knowledge_base_count(&self) -> usize {
-        self.rag.count().await
+        self.rag_engine.count().await
     }
     
     /// Indexes a directory into the knowledge base.
@@ -239,7 +239,7 @@ impl ChatManager {
     ///
     /// Returns an error if indexing fails.
     pub async fn index_directory(&self, dir_path: &Path) -> Result<usize> {
-        self.rag.index_directory(dir_path).await
+        self.rag_engine.index_directory(dir_path).await
             .context("Failed to index directory")
     }
 
@@ -339,13 +339,13 @@ impl ChatManager {
         F: FnMut(&str) + Send,
     {
         // Retrieve relevant context from knowledge base if available
-        let rag_count = self.rag.count().await;
+        let rag_count = self.rag_engine.count().await;
         debug!("RAG knowledge base has {} documents", rag_count);
         
         // Context retrieved from RAG
         let context = if rag_count > 0 {
             debug!("Retrieving RAG context for query: {}", user_message);
-            self.rag.retrieve_context(user_message).await
+            self.rag_engine.retrieve_context(user_message).await
                 .unwrap_or_else(|e| {
                     debug!("Could not retrieve RAG context: {}", e);
                     String::new()
@@ -640,13 +640,13 @@ impl ChatManagerBuilder {
         let provider: Arc<dyn Provider> = Arc::new(
             MistralRsProvider::new(&config, Arc::clone(&registry)).await?
         );
-        let rag = Rag::new(&config, provider.clone()).await?;
+        let rag_engine = RagEngine::new(&config, provider.clone()).await?;
 
         Ok(ChatManager {
             config,
             provider,
             registry,
-            rag,
+            rag_engine,
         })
     }
 }
