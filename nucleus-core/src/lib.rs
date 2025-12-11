@@ -14,13 +14,12 @@
 pub mod chat;
 pub mod config;
 pub mod detection;
-pub mod model_downloader;
+pub mod models;
 pub mod patterns;
 pub mod provider;
 pub mod qdrant_helper;
 pub mod rag;
 pub mod server;
-pub mod utils;
 
 // Public exports
 pub use chat::{ChatManager, ChatManagerBuilder};

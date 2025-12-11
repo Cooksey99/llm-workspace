@@ -9,9 +9,9 @@ use super::types::*;
 use anyhow::Context;
 use async_trait::async_trait;
 use mistralrs::{
-    CalledFunction, EmbeddingModelBuilder, Function, GgufModelBuilder, IsqType, Model, PagedAttentionMetaBuilder, RequestBuilder, Response, TextMessageRole, TextMessages, TextModelBuilder, Tool as MistralTool, ToolCallback, ToolChoice, ToolType
+    EmbeddingModelBuilder, Function, GgufModelBuilder, IsqType, Model, PagedAttentionMetaBuilder, RequestBuilder, Response, TextMessageRole, TextMessages, TextModelBuilder, Tool as MistralTool, ToolChoice, ToolType
 };
-use nucleus_plugin::{Plugin, PluginRegistry};
+use nucleus_plugin::PluginRegistry;
 use tracing::{debug, info, warn};
 
 use std::path::Path;
