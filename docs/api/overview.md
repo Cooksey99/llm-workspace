@@ -10,7 +10,7 @@ Nucleus exposes a clean, composable API for building AI-powered developer tools.
 - **[`Config`](./configuration.md)** - Configures LLM, RAG, storage, and permissions (`nucleus-core`)
 - **[`Plugin`](./plugin-trait.md)** - Trait for extending AI capabilities (`nucleus-plugin`)
 - **[`PluginRegistry`](./plugin-registry.md)** - Manages available tools and permissions (`nucleus-plugin`)
-- **[`Rag`](./rag.md)** - Knowledge base and semantic search (`nucleus-core`)
+- **[`RagEngine`](./rag.md)** - Knowledge base and semantic search with batch indexing (`nucleus-core`)
 - **[`Provider`](./providers.md)** - LLM backend abstraction (`nucleus-core`)
 
 ### Standard Plugins
@@ -80,7 +80,9 @@ nucleus/
 ├── nucleus-core/       # Core orchestration and LLM integration
 │   ├── ChatManager     # Main API entry point
 │   ├── Config          # Configuration system
-│   ├── Rag             # Knowledge base / RAG
+│   ├── RagEngine       # Knowledge base / RAG with batch operations
+│   ├── Indexer         # Text chunking and file collection
+│   ├── ModelRegistry   # Catalog of LLM and embedding models
 │   └── Provider        # LLM backend abstraction
 │
 ├── nucleus-plugin/     # Plugin system foundation

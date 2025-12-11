@@ -24,7 +24,10 @@ fn main() {
     println!("\n=== Get Specific Model ===");
     if let Some(embed) = registry.get_embedding("qwen3-embedding-0.6b") {
         println!("Found: {}", embed.name);
-        println!("HuggingFace: {}", embed.hf_repo);
+        println!(
+            "HuggingFace: {}",
+            embed.hf_repo.clone().unwrap().to_string()
+        );
         println!("Embedding dimension: {}", embed.embedding_dim);
         println!("Context length: {}", embed.context_length);
     }

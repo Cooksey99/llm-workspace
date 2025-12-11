@@ -53,20 +53,6 @@ impl Indexer {
         chunk_text(text, self.config.chunk_size, self.config.chunk_overlap)
     }
 
-    /// Returns the configured chunk size.
-    pub fn chunk_size(&self) -> usize {
-        self.config.chunk_size
-    }
-
-    /// Returns the configured chunk overlap.
-    pub fn chunk_overlap(&self) -> usize {
-        self.config.chunk_overlap
-    }
-
-    /// Returns a reference to the indexer configuration.
-    pub fn config(&self) -> &IndexerConfig {
-        &self.config
-    }
 }
 
 /// Splits text into overlapping chunks for better context preservation.

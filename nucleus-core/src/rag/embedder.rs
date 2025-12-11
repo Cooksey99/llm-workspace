@@ -3,7 +3,7 @@
 //! This module provides functionality to convert text into vector embeddings
 //! using provider embedding models.
 
-use crate::provider::{Provider, ProviderError};
+use crate::{models::EmbeddingModel, provider::{Provider, ProviderError}};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -39,11 +39,11 @@ pub type Result<T> = std::result::Result<T, EmbedderError>;
 #[derive(Clone)]
 pub struct Embedder {
     provider: Arc<dyn Provider>,
-    model: String,
+    model: EmbeddingModel,
 }
 
 impl Embedder {
-    pub fn new(provider: Arc<dyn Provider>, model: impl Into<String>) -> Self {
+    pub fn new(provider: Arc<dyn Provider>, model: impl Into<EmbeddingModel>) -> Self {
         Self {
             provider,
             model: model.into(),

@@ -1,8 +1,10 @@
 //! Common types for LLM providers.
 
 use async_trait::async_trait;
-use serde::{de::IntoDeserializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::models::EmbeddingModel;
 
 /// Errors that can occur when interacting with a provider.
 #[derive(Debug, Error)]
@@ -38,11 +40,11 @@ pub trait Provider: Send + Sync {
     ) -> Result<()>;
     
     /// Generate an embedding vector for the given text.
-    async fn embed(&self, text: &str, model: &str) -> Result<Vec<f32>>;
+    async fn embed(&self, text: &str, model: &EmbeddingModel) -> Result<Vec<f32>>;
     
     /// Generate embeddings for multiple texts in batch.
     /// Default implementation calls embed() sequentially.
-    async fn embed_batch(&self, texts: &[&str], model: &str) -> Result<Vec<Vec<f32>>> {
+    async fn embed_batch(&self, texts: &[&str], model: &EmbeddingModel) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::with_capacity(texts.len());
         for text in texts {
             embeddings.push(self.embed(text, model).await?);

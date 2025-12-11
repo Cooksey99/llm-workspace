@@ -2,8 +2,10 @@
 //!
 //! This module provides an Ollama HTTP API client that implements the Provider trait.
 
+use crate::models::EmbeddingModel;
 use super::types::*;
 use async_trait::async_trait;
+
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -132,11 +134,11 @@ impl Provider for OllamaProvider {
         Ok(())
     }
     
-    async fn embed(&self, text: &str, _model: &str) -> Result<Vec<f32>> {
+    async fn embed(&self, text: &str, _model: &EmbeddingModel) -> Result<Vec<f32>> {
         let url = format!("{}/api/embed", self.base_url);
         
         let embed_request = EmbedRequest {
-            model: self.config.rag.embedding_model.clone(),
+            model: self.config.rag.embedding_model.name.clone(),
             input: text.to_string(),
         };
         

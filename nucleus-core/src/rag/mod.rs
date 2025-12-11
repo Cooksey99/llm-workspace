@@ -112,16 +112,17 @@ impl RagEngine {
     /// # }
     /// ```
     pub async fn new(config: &Config, provider: Arc<dyn Provider>) -> Result<Self> {
-        let embedder = Embedder::new(provider, &config.rag.embedding_model);
+        let embedder = Embedder::new(provider, config.rag.embedding_model.clone());
                 
         let store = create_vector_store(
             config.storage.clone(),
-            config.rag.chunk_size.try_into().unwrap_or_default(),
+            config.rag.embedding_model.embedding_dim.try_into().unwrap_or_default(),
         ).await.map_err(|e| RagError::Retrieval(e.to_string()))?;
         
         let mut indexer_config = config.rag.indexer.clone();
-        indexer_config.chunk_size = config.rag.chunk_size;
-        indexer_config.chunk_overlap = config.rag.chunk_overlap;
+        
+        indexer_config.chunk_size = config.rag.indexer.chunk_size;
+        indexer_config.chunk_overlap = config.rag.indexer.chunk_overlap;
         let indexer = Indexer::new(indexer_config);
         
         Ok(Self {

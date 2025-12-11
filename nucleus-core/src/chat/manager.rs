@@ -28,6 +28,7 @@
 //! preserves tool calls from any chunk to ensure they're not lost.
 
 use crate::config::Config;
+use crate::models::EmbeddingModel;
 use crate::provider::{ChatRequest, ChatResponse, Message, MistralRsProvider, Provider, Tool, ToolCall, ToolFunction};
 use crate::rag::RagEngine;
 use nucleus_plugin::PluginRegistry;
@@ -80,7 +81,7 @@ pub struct ChatManager {
     /// Registry for available plugins/tools
     registry: Arc<PluginRegistry>,
     /// RAG manager for knowledge base integration (with persistent storage)
-    rag_engine: RagEngine,
+    rag_engine:  Arc<RagEngine>,
 }
 
 impl ChatManager {
@@ -165,7 +166,7 @@ impl ChatManager {
     /// # }
     /// ```
     pub async fn with_provider(mut self, provider: Arc<dyn Provider>) -> Result<Self> {
-        self.rag_engine = RagEngine::new(&self.config, provider.clone()).await?;
+        self.rag_engine = Arc::new(RagEngine::new(&self.config, provider.clone()).await?);
         self.provider = provider;
         Ok(self)
     }
@@ -190,7 +191,7 @@ impl ChatManager {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn with_rag(mut self, rag: RagEngine) -> Self {
+    pub fn with_rag(mut self, rag: Arc<RagEngine>) -> Self {
         self.rag_engine = rag;
         self
     }
@@ -529,7 +530,7 @@ pub struct ChatManagerBuilder {
     config: Config,
     registry: PluginRegistry,
     llm_model_override: Option<String>,
-    embedding_model_override: Option<String>,
+    embedding_model_override: Option<EmbeddingModel>,
 }
 
 impl ChatManagerBuilder {
@@ -611,7 +612,7 @@ impl ChatManagerBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn with_embedding_model(mut self, model: impl Into<String>) -> Self {
+    pub fn with_embedding_model(mut self, model: impl Into<EmbeddingModel>) -> Self {
         self.embedding_model_override = Some(model.into());
         self
     }
@@ -640,7 +641,7 @@ impl ChatManagerBuilder {
         let provider: Arc<dyn Provider> = Arc::new(
             MistralRsProvider::new(&config, Arc::clone(&registry)).await?
         );
-        let rag_engine = RagEngine::new(&config, provider.clone()).await?;
+        let rag_engine = Arc::new(RagEngine::new(&config, provider.clone()).await?);
 
         Ok(ChatManager {
             config,

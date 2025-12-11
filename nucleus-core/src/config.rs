@@ -3,6 +3,8 @@ use std::fs;
 use std::path::Path;
 use thiserror::Error;
 
+use crate::models::EmbeddingModel;
+
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("Failed to read config file: {0}")]
@@ -67,9 +69,7 @@ pub struct LlmConfig {
 /// This covers embedding settings and text processing behavior (chunking, indexing).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RagConfig {
-    pub embedding_model: String,
-    pub chunk_size: usize,
-    pub chunk_overlap: usize,
+    pub embedding_model: EmbeddingModel,
     #[serde(default)]
     pub indexer: IndexerConfig,
 }
@@ -132,14 +132,19 @@ impl Default for StorageMode {
 }
 
 impl Default for RagConfig {
-    // let model =
     fn default() -> Self {
-        Self {
-            // embedding_model: "models/Qwen3-Embedding-0.6B".to_string(),
-            embedding_model: "Qwen/Qwen3-Embedding-0.6B".to_string(),
-            chunk_size: 512,
+        let embedding_model = EmbeddingModel::default();
+
+        let indexer = IndexerConfig {
+            extensions: Vec::new(),
+            exclude_patterns: default_exclude_patterns(),
+            chunk_size: embedding_model.embedding_dim,
             chunk_overlap: 50,
-            indexer: IndexerConfig::default(),
+        };
+
+        Self {
+            embedding_model,
+            indexer,
         }
     }
 }
@@ -281,8 +286,6 @@ mod tests {
     #[test]
     fn test_rag_config_defaults() {
         let config = RagConfig::default();
-        assert_eq!(config.embedding_model, "models/Qwen3-Embedding-0.6B");
-        assert_eq!(config.chunk_size, 512);
-        assert_eq!(config.chunk_overlap, 50);
+        assert_eq!(config.embedding_model.name, EmbeddingModel::default().name);
     }
 }
